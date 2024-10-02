@@ -20,6 +20,8 @@ enum TokenType {
     SemiColon,
     EqualEqual,
     Equal,
+    Bang,
+    BangEqual,
     EOF
 }
 
@@ -59,6 +61,8 @@ impl fmt::Display for TokenType {
             TokenType::SemiColon => write!(f, "SEMICOLON"),
             TokenType::Equal => write!(f, "EQUAL"),
             TokenType::EqualEqual => write!(f, "EQUAL_EQUAL"),
+            TokenType::Bang => write!(f, "BANG"),
+            TokenType::BangEqual => write!(f, "BANG_EQUAL"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -94,6 +98,13 @@ impl Token {
                         Some(Token{ token_type: TokenType::EqualEqual, lexem: "==".to_string()})
                     } else {
                         Some(Token{ token_type: TokenType::Equal, lexem: lexem.to_string()})
+                    }
+                }
+                '!' => {
+                    if scanner.match_char('=') {
+                        Some(Token{ token_type: TokenType::BangEqual, lexem: "!=".to_string()})
+                    } else {
+                        Some(Token{ token_type: TokenType::Bang, lexem: lexem.to_string()})
                     }
                 }
                 _ => None
