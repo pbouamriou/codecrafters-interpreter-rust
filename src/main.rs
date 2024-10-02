@@ -8,6 +8,13 @@ enum TokenType {
     RightParent,
     LeftBrace,
     RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Star,
+    Divide,
+    SemiColon,
     EOF
 }
 
@@ -18,6 +25,13 @@ impl fmt::Display for TokenType {
             TokenType::RightParent => write!(f, "RIGHT_PAREN"),
             TokenType::LeftBrace => write!(f, "LEFT_BRACE"),
             TokenType::RightBrace => write!(f, "RIGHT_BRACE"),
+            TokenType::Comma => write!(f, "COMMA"),
+            TokenType::Dot => write!(f, "DOT"),
+            TokenType::Minus => write!(f, "MINUS"),
+            TokenType::Plus => write!(f, "PLUS"),
+            TokenType::Star => write!(f, "STAR"),
+            TokenType::Divide => write!(f, "DIV"),
+            TokenType::SemiColon => write!(f, "SEMICOLON"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -35,6 +49,13 @@ impl Token {
             '(' => Some(Token{ token_type: TokenType::LeftParent, lexem: lexem.to_string()}),
             '}' => Some(Token{ token_type: TokenType::RightBrace, lexem: lexem.to_string()}),
             '{' => Some(Token{ token_type: TokenType::LeftBrace, lexem: lexem.to_string()}),
+            ',' => Some(Token{ token_type: TokenType::Comma, lexem: lexem.to_string()}),
+            '.' => Some(Token{ token_type: TokenType::Dot, lexem: lexem.to_string()}),
+            '-' => Some(Token{ token_type: TokenType::Minus, lexem: lexem.to_string()}),
+            '+' => Some(Token{ token_type: TokenType::Plus, lexem: lexem.to_string()}),
+            '*' => Some(Token{ token_type: TokenType::Star, lexem: lexem.to_string()}),
+            '/' => Some(Token{ token_type: TokenType::Divide, lexem: lexem.to_string()}),
+            ';' => Some(Token{ token_type: TokenType::SemiColon, lexem: lexem.to_string()}),
             _ => None
         }
     }
