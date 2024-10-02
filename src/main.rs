@@ -1,16 +1,60 @@
+use core::fmt;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
 
-fn tokenize(contents: &str) {
-    for str in contents.chars() {
-        match str {
-            '(' => println!("LEFT_PAREN ( null"),
-            ')' => println!("RIGHT_PAREN ) null"),
-            _ => {}
+enum TokenType {
+    LeftParent,
+    RightParent,
+    LeftBrace,
+    RightBrace,
+    EOF
+}
+
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenType::LeftParent => write!(f, "LEFT_PAREN"),
+            TokenType::RightParent => write!(f, "RIGHT_PAREN"),
+            TokenType::LeftBrace => write!(f, "LEFT_BRACE"),
+            TokenType::RightBrace => write!(f, "RIGHT_BRACE"),
+            TokenType::EOF => write!(f, "EOF"),
         }
     }
-    println!("EOF  null");
+}
+
+struct Token {
+    token_type: TokenType,
+    lexem: String,
+}
+
+impl Token {
+    pub fn new_from_lexem(lexem: char) -> Option<Self>  {
+        match lexem {
+            ')' => Some(Token{ token_type: TokenType::RightParent, lexem: lexem.to_string()}),
+            '(' => Some(Token{ token_type: TokenType::LeftParent, lexem: lexem.to_string()}),
+            '}' => Some(Token{ token_type: TokenType::RightBrace, lexem: lexem.to_string()}),
+            '{' => Some(Token{ token_type: TokenType::LeftBrace, lexem: lexem.to_string()}),
+            _ => None
+        }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} null", self.token_type, self.lexem)
+    }
+}
+
+fn tokenize(contents: &str) -> Vec<Token> {
+    let mut tokens: Vec<Token> = Vec::new();
+    for character in contents.chars() {
+        if let Some(x) = Token::new_from_lexem(character) {
+            tokens.push(x);
+        }
+    }
+    tokens.push(Token{ token_type: TokenType::EOF, lexem: "".to_string()});
+    tokens
 }
 
 fn main() {
@@ -33,7 +77,11 @@ fn main() {
                 String::new()
             });
 
-            tokenize(&file_contents)
+            let tokens = tokenize(&file_contents);
+            for token in tokens.iter() {
+                println!("{}", token)
+            }
+            return;
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
