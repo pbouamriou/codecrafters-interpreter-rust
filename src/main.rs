@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::process::Termination;
 use std::process::ExitCode;
 
+#[derive(PartialEq, Clone, Copy)]
 enum TokenType {
     LeftParent,
     RightParent,
@@ -17,6 +18,8 @@ enum TokenType {
     Star,
     Divide,
     SemiColon,
+    EqualEqual,
+    Equal,
     EOF
 }
 
@@ -54,6 +57,8 @@ impl fmt::Display for TokenType {
             TokenType::Star => write!(f, "STAR"),
             TokenType::Divide => write!(f, "DIV"),
             TokenType::SemiColon => write!(f, "SEMICOLON"),
+            TokenType::Equal => write!(f, "EQUAL"),
+            TokenType::EqualEqual => write!(f, "EQUAL_EQUAL"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -63,22 +68,38 @@ struct Token {
     token_type: TokenType,
     lexem: String,
 }
+pub trait Scanner {
+    fn match_char(& mut self, character: char) -> bool;
+    fn get_char(& mut self) -> Option<char>;
+}
 
 impl Token {
-    pub fn new_from_lexem(lexem: char) -> Option<Self>  {
-        match lexem {
-            ')' => Some(Token{ token_type: TokenType::RightParent, lexem: lexem.to_string()}),
-            '(' => Some(Token{ token_type: TokenType::LeftParent, lexem: lexem.to_string()}),
-            '}' => Some(Token{ token_type: TokenType::RightBrace, lexem: lexem.to_string()}),
-            '{' => Some(Token{ token_type: TokenType::LeftBrace, lexem: lexem.to_string()}),
-            ',' => Some(Token{ token_type: TokenType::Comma, lexem: lexem.to_string()}),
-            '.' => Some(Token{ token_type: TokenType::Dot, lexem: lexem.to_string()}),
-            '-' => Some(Token{ token_type: TokenType::Minus, lexem: lexem.to_string()}),
-            '+' => Some(Token{ token_type: TokenType::Plus, lexem: lexem.to_string()}),
-            '*' => Some(Token{ token_type: TokenType::Star, lexem: lexem.to_string()}),
-            '/' => Some(Token{ token_type: TokenType::Divide, lexem: lexem.to_string()}),
-            ';' => Some(Token{ token_type: TokenType::SemiColon, lexem: lexem.to_string()}),
-            _ => None
+    pub fn new_from_scanner(scanner: &mut impl Scanner) -> Option<Self>  {
+        if let Some(lexem) =  scanner.get_char() {
+            writeln!(io::stderr(), "character {}", lexem).unwrap();
+            match lexem {
+                ')' => Some(Token{ token_type: TokenType::RightParent, lexem: lexem.to_string()}),
+                '(' => Some(Token{ token_type: TokenType::LeftParent, lexem: lexem.to_string()}),
+                '}' => Some(Token{ token_type: TokenType::RightBrace, lexem: lexem.to_string()}),
+                '{' => Some(Token{ token_type: TokenType::LeftBrace, lexem: lexem.to_string()}),
+                ',' => Some(Token{ token_type: TokenType::Comma, lexem: lexem.to_string()}),
+                '.' => Some(Token{ token_type: TokenType::Dot, lexem: lexem.to_string()}),
+                '-' => Some(Token{ token_type: TokenType::Minus, lexem: lexem.to_string()}),
+                '+' => Some(Token{ token_type: TokenType::Plus, lexem: lexem.to_string()}),
+                '*' => Some(Token{ token_type: TokenType::Star, lexem: lexem.to_string()}),
+                '/' => Some(Token{ token_type: TokenType::Divide, lexem: lexem.to_string()}),
+                ';' => Some(Token{ token_type: TokenType::SemiColon, lexem: lexem.to_string()}),
+                '=' => {
+                    if scanner.match_char('=') {
+                        Some(Token{ token_type: TokenType::EqualEqual, lexem: "==".to_string()})
+                    } else {
+                        Some(Token{ token_type: TokenType::Equal, lexem: lexem.to_string()})
+                    }
+                }
+                _ => None
+            }
+        } else {
+            Some(Token{ token_type: TokenType::EOF, lexem: "".to_string()})
         }
     }
 }
@@ -89,27 +110,74 @@ impl fmt::Display for Token {
     }
 }
 
-fn tokenize(contents: &str) -> Result<Vec<Token>, Vec<Token>> {
-    let mut tokens: Vec<Token> = Vec::new();
-    let mut line_number = 1;
-    let mut error = false;
-    for character in contents.chars() {
-        if character == '\n' {
-            line_number += 1
+
+struct LoxScanner<'a> {
+    current: usize,
+    source: &'a str
+}
+
+impl<'a> LoxScanner<'a> {
+    pub fn new(contents: &'a str) -> Self {
+        Self { current: 0, source: contents }
+    }
+
+    pub fn tokenize(& mut self) -> Result<Vec<Token>, Vec<Token>> {
+        let mut tokens: Vec<Token> = Vec::new();
+        let mut line_number = 1;
+        let mut error = false;
+        loop {
+            if let Some(character) = self.peek() {
+                if character == '\n' {
+                    line_number += 1
+                }
+                if let Some(x) = Token::new_from_scanner(self) {
+                    tokens.push(x);
+                }
+                else if character != '\n' && character != '\r' {
+                    writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
+                    error = true
+                }
+            } else {
+                tokens.push(Token{ token_type: TokenType::EOF, lexem: "".to_string() });
+                break;
+            }
         }
-        if let Some(x) = Token::new_from_lexem(character) {
-            tokens.push(x);
-        }
-        else if character != '\n' && character != '\r' {
-            writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
-            error = true
+        if !error {
+            Ok(tokens)
+        } else {
+            Err(tokens)
         }
     }
-    tokens.push(Token{ token_type: TokenType::EOF, lexem: "".to_string()});
-    if !error {
-        Ok(tokens)
-    } else {
-        Err(tokens)
+
+    fn peek(&self) -> Option<char> {
+        if self.current >= self.source.len() {
+            return None;
+        }
+        let item = self.source.as_bytes().get(self.current);
+        match item {
+            Some(x) => Some((*x) as char),
+            None => None
+        }
+    }
+}
+
+impl<'a> Scanner for LoxScanner<'a> {
+    fn get_char(& mut self) -> Option<char> {
+        let x = self.peek();
+        if let Some(_) = x {
+            self.current += 1;
+        }
+        x
+    }
+
+    fn match_char(& mut self, character: char) -> bool {
+        if let Some(x) = self.peek() {
+            if x == character {
+                self.current += 1;
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -133,7 +201,9 @@ fn main() -> AppExitCode {
                 String::new()
             });
 
-            match tokenize(&file_contents) {
+            let mut scanner = LoxScanner::new(&file_contents);
+
+            match scanner.tokenize() {
                 Ok(tokens) => {
                     for token in tokens.iter() {
                         println!("{}", token)
