@@ -2,6 +2,8 @@ use core::fmt;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::process::Termination;
+use std::process::ExitCode;
 
 enum TokenType {
     LeftParent,
@@ -16,6 +18,26 @@ enum TokenType {
     Divide,
     SemiColon,
     EOF
+}
+
+enum ApplicationErrorCode {
+    UnexpectedCaracter = 65,
+    WrongNumberOfParameters = 1,
+    UnknownCommand = 2,
+}
+enum AppExitCode {
+    Ok,
+    Err(ApplicationErrorCode),
+}
+
+
+impl Termination for AppExitCode {
+    fn report(self) -> ExitCode {
+        match self {
+            AppExitCode::Ok => ExitCode::SUCCESS,
+            AppExitCode::Err(v) => ExitCode::from(v as u8),
+        }
+    }
 }
 
 impl fmt::Display for TokenType {
@@ -67,22 +89,35 @@ impl fmt::Display for Token {
     }
 }
 
-fn tokenize(contents: &str) -> Vec<Token> {
+fn tokenize(contents: &str) -> Result<Vec<Token>, Vec<Token>> {
     let mut tokens: Vec<Token> = Vec::new();
+    let mut line_number = 1;
+    let mut error = false;
     for character in contents.chars() {
+        if character == '\n' {
+            line_number += 1
+        }
         if let Some(x) = Token::new_from_lexem(character) {
             tokens.push(x);
         }
+        else if character != '\n' && character != '\r' {
+            writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
+            error = true
+        }
     }
     tokens.push(Token{ token_type: TokenType::EOF, lexem: "".to_string()});
-    tokens
+    if !error {
+        Ok(tokens)
+    } else {
+        Err(tokens)
+    }
 }
 
-fn main() {
+fn main() -> AppExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         writeln!(io::stderr(), "Usage: {} tokenize <filename>", args[0]).unwrap();
-        return;
+        return AppExitCode::Err(ApplicationErrorCode::WrongNumberOfParameters)
     }
 
     let command = &args[1];
@@ -98,15 +133,24 @@ fn main() {
                 String::new()
             });
 
-            let tokens = tokenize(&file_contents);
-            for token in tokens.iter() {
-                println!("{}", token)
+            match tokenize(&file_contents) {
+                Ok(tokens) => {
+                    for token in tokens.iter() {
+                        println!("{}", token)
+                    }
+                    return AppExitCode::Ok;
+                },
+                Err(tokens) => {
+                    for token in tokens.iter() {
+                        println!("{}", token)
+                    }
+                    return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
+                }
             }
-            return;
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
-            return;
+            return AppExitCode::Err(ApplicationErrorCode::UnknownCommand);
         }
     }
 }
