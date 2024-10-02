@@ -22,6 +22,10 @@ enum TokenType {
     Equal,
     Bang,
     BangEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
     EOF
 }
 
@@ -63,6 +67,10 @@ impl fmt::Display for TokenType {
             TokenType::EqualEqual => write!(f, "EQUAL_EQUAL"),
             TokenType::Bang => write!(f, "BANG"),
             TokenType::BangEqual => write!(f, "BANG_EQUAL"),
+            TokenType::Less => write!(f, "LESS"),
+            TokenType::LessEqual => write!(f, "LESS_EQUAL"),
+            TokenType::Greater => write!(f, "GREATER"),
+            TokenType::GreaterEqual => write!(f, "GREATER_EQUAL"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -105,6 +113,20 @@ impl Token {
                         Some(Token{ token_type: TokenType::BangEqual, lexem: "!=".to_string()})
                     } else {
                         Some(Token{ token_type: TokenType::Bang, lexem: lexem.to_string()})
+                    }
+                }
+                '<' => {
+                    if scanner.match_char('=') {
+                        Some(Token{ token_type: TokenType::LessEqual, lexem: "<=".to_string()})
+                    } else {
+                        Some(Token{ token_type: TokenType::Less, lexem: lexem.to_string()})
+                    }
+                }
+                '>' => {
+                    if scanner.match_char('=') {
+                        Some(Token{ token_type: TokenType::GreaterEqual, lexem: ">=".to_string()})
+                    } else {
+                        Some(Token{ token_type: TokenType::Greater, lexem: lexem.to_string()})
                     }
                 }
                 _ => None
