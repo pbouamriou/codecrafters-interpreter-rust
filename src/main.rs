@@ -16,7 +16,7 @@ enum TokenType {
     Minus,
     Plus,
     Star,
-    Divide,
+    Slash,
     SemiColon,
     EqualEqual,
     Equal,
@@ -26,6 +26,7 @@ enum TokenType {
     LessEqual,
     Greater,
     GreaterEqual,
+    Comment,
     EOF
 }
 
@@ -61,7 +62,7 @@ impl fmt::Display for TokenType {
             TokenType::Minus => write!(f, "MINUS"),
             TokenType::Plus => write!(f, "PLUS"),
             TokenType::Star => write!(f, "STAR"),
-            TokenType::Divide => write!(f, "DIV"),
+            TokenType::Slash => write!(f, "SLASH"),
             TokenType::SemiColon => write!(f, "SEMICOLON"),
             TokenType::Equal => write!(f, "EQUAL"),
             TokenType::EqualEqual => write!(f, "EQUAL_EQUAL"),
@@ -71,6 +72,7 @@ impl fmt::Display for TokenType {
             TokenType::LessEqual => write!(f, "LESS_EQUAL"),
             TokenType::Greater => write!(f, "GREATER"),
             TokenType::GreaterEqual => write!(f, "GREATER_EQUAL"),
+            TokenType::Comment => write!(f, "COMMENT"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -81,7 +83,8 @@ struct Token {
     lexem: String,
 }
 pub trait Scanner {
-    fn match_char(& mut self, character: char) -> bool;
+    fn match_char(& mut self, character: char) -> Option<bool>;
+    fn match_not_char(& mut self, character: char) -> Option<bool>;
     fn get_char(& mut self) -> Option<char>;
 }
 
@@ -99,31 +102,39 @@ impl Token {
                 '-' => Some(Token{ token_type: TokenType::Minus, lexem: lexem.to_string()}),
                 '+' => Some(Token{ token_type: TokenType::Plus, lexem: lexem.to_string()}),
                 '*' => Some(Token{ token_type: TokenType::Star, lexem: lexem.to_string()}),
-                '/' => Some(Token{ token_type: TokenType::Divide, lexem: lexem.to_string()}),
+                '/' => {
+                    if scanner.match_char('/').is_some_and(|x| x) {
+                        while scanner.match_not_char('\n').is_some_and(|x| x) {
+                        }
+                        Some(Token{ token_type: TokenType::Comment, lexem: "".to_string()})
+                    } else {
+                        Some(Token{ token_type: TokenType::Slash, lexem: lexem.to_string()})
+                    }
+                },
                 ';' => Some(Token{ token_type: TokenType::SemiColon, lexem: lexem.to_string()}),
                 '=' => {
-                    if scanner.match_char('=') {
+                    if scanner.match_char('=').is_some_and(|x| x) {
                         Some(Token{ token_type: TokenType::EqualEqual, lexem: "==".to_string()})
                     } else {
                         Some(Token{ token_type: TokenType::Equal, lexem: lexem.to_string()})
                     }
                 }
                 '!' => {
-                    if scanner.match_char('=') {
+                    if scanner.match_char('=').is_some_and(|x| x) {
                         Some(Token{ token_type: TokenType::BangEqual, lexem: "!=".to_string()})
                     } else {
                         Some(Token{ token_type: TokenType::Bang, lexem: lexem.to_string()})
                     }
                 }
                 '<' => {
-                    if scanner.match_char('=') {
+                    if scanner.match_char('=').is_some_and(|x| x) {
                         Some(Token{ token_type: TokenType::LessEqual, lexem: "<=".to_string()})
                     } else {
                         Some(Token{ token_type: TokenType::Less, lexem: lexem.to_string()})
                     }
                 }
                 '>' => {
-                    if scanner.match_char('=') {
+                    if scanner.match_char('=').is_some_and(|x| x) {
                         Some(Token{ token_type: TokenType::GreaterEqual, lexem: ">=".to_string()})
                     } else {
                         Some(Token{ token_type: TokenType::Greater, lexem: lexem.to_string()})
@@ -164,7 +175,10 @@ impl<'a> LoxScanner<'a> {
                     line_number += 1
                 }
                 if let Some(x) = Token::new_from_scanner(self) {
-                    tokens.push(x);
+                    let token_type = x.token_type.clone();
+                    if token_type != TokenType::Comment {
+                        tokens.push(x);
+                    }
                 }
                 else if character != '\n' && character != '\r' {
                     writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
@@ -203,14 +217,28 @@ impl<'a> Scanner for LoxScanner<'a> {
         x
     }
 
-    fn match_char(& mut self, character: char) -> bool {
+    fn match_char(& mut self, character: char) -> Option<bool> {
         if let Some(x) = self.peek() {
             if x == character {
                 self.current += 1;
-                return true;
+                return Some(true);
+            } else {
+                return Some(false);
             }
         }
-        false
+        None
+    }
+
+    fn match_not_char(& mut self, character: char) -> Option<bool> {
+        if let Some(x) = self.peek() {
+            if x != character {
+                self.current += 1;
+                return Some(true);
+            } else {
+                return Some(false);
+            }
+        }
+        None
     }
 }
 
