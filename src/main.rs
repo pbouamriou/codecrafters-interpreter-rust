@@ -32,6 +32,7 @@ enum TokenType {
     NewLine,
     String,
     Number,
+    Identifier,
     EOF
 }
 
@@ -83,6 +84,7 @@ impl fmt::Display for TokenType {
             TokenType::NewLine => write!(f, "|NEWLINE|"),
             TokenType::String => write!(f, "STRING"),
             TokenType::Number => write!(f, "NUMBER"),
+            TokenType::Identifier => write!(f, "IDENTIFIER"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -163,6 +165,27 @@ impl Token {
             Err(ScannerError::UnterminatedString)
         }
     }
+    
+    fn scan_identifier(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
+        let mut content = String::new();
+        content.push(lexem);
+        while scanner.match_with_fn(|car| {
+            match car {
+               'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => true,
+               _ => false
+            }
+        }).is_some_and(|x| match x {
+            MatchResult::Match(car) => {
+                content.push(car);
+                true
+            },
+            MatchResult::NotMatch(_) => {
+                false
+            }
+        }) {
+        }
+        Ok(Token::new(TokenType::Identifier, content))
+    }
 
     fn scan_number(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
         let mut content = String::new();
@@ -170,7 +193,7 @@ impl Token {
         content.push(lexem);
         while scanner.match_with_fn(|car| {
             match car {
-               '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => true,
+               '0'..='9' => true,
                '.' => { if !has_dot { 
                     has_dot = true; 
                     true
@@ -207,7 +230,8 @@ impl Token {
                 '+' => Ok(Token::new(TokenType::Plus, lexem.to_string())),
                 '*' => Ok(Token::new(TokenType::Star, lexem.to_string())),
                 '"' => Self::scan_string(lexem, scanner),
-                '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => Self::scan_number(lexem, scanner),
+                'a'..='z' | 'A'..='Z' | '_' => Self::scan_identifier(lexem, scanner),
+                '0'..='9' => Self::scan_number(lexem, scanner),
                 '/' => {
                     if scanner.match_char('/').is_some_and(|x| x) {
                         while scanner.match_not_char('\n').is_some_and(|x| match x {
