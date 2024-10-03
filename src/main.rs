@@ -31,6 +31,7 @@ enum TokenType {
     Tab,
     NewLine,
     String,
+    Number,
     EOF
 }
 
@@ -81,6 +82,7 @@ impl fmt::Display for TokenType {
             TokenType::Tab => write!(f, "|TAB|"),
             TokenType::NewLine => write!(f, "|NEWLINE|"),
             TokenType::String => write!(f, "STRING"),
+            TokenType::Number => write!(f, "NUMBER"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -105,6 +107,7 @@ struct Token {
 pub trait Scanner {
     fn match_char(& mut self, character: char) -> Option<bool>;
     fn match_not_char(& mut self, character: char) -> Option<MatchResult>;
+    fn match_with_fn(& mut self, match_fn: impl FnMut(char) -> bool) -> Option<MatchResult>;
     fn get_char(& mut self) -> Option<char>;
 }
 
@@ -113,9 +116,24 @@ impl Token {
     pub fn new(token_type: TokenType, lexem: String ) -> Self {
         let is_filtered =  token_type == TokenType::Comment || token_type == TokenType::Space || token_type == TokenType::Tab || token_type == TokenType::NewLine;
         let mut evaluation = "null".to_string();
-        if token_type == TokenType::String {
-            let x : Vec<&str> = lexem.split('"').collect();
-            evaluation = x.get(1).unwrap().to_string();
+        match token_type {
+            TokenType::String => {
+                let x : Vec<&str> = lexem.split('"').collect();
+                evaluation = x.get(1).unwrap().to_string();
+            }
+            TokenType::Number => {
+                if let Ok(value) = lexem.parse::<u64>() {
+                    evaluation = format!("{:.1}", value as f64);
+                } else {
+                    let value : f64 = lexem.parse().unwrap();
+                    if value == ((value as u64) as f64) {
+                        evaluation = format!("{:.1}", value as f64);
+                    } else {
+                        evaluation = format!("{}", value);
+                    }
+                }
+            }
+            _ => {}
         }
         Self {
             token_type,
@@ -123,6 +141,56 @@ impl Token {
             evaluation,
             is_filtered
         }
+    }
+
+    fn scan_string(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
+        let mut content = String::new();
+        content.push(lexem);
+        while scanner.match_not_char('"').is_some_and(|x| match x {
+            MatchResult::Match(car) => {
+                content.push(car);
+                true
+            },
+            MatchResult::NotMatch(car) => {
+                content.push(car);
+                false
+            }
+        }) {
+        }
+        if scanner.get_char().is_some_and(|x| x == '"') {
+            Ok(Token::new(TokenType::String, content))
+        } else {
+            Err(ScannerError::UnterminatedString)
+        }
+    }
+
+    fn scan_number(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
+        let mut content = String::new();
+        let mut has_dot = false;
+        content.push(lexem);
+        while scanner.match_with_fn(|car| {
+            match car {
+               '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => true,
+               '.' => { if !has_dot { 
+                    has_dot = true; 
+                    true
+                } else { 
+                    false
+                }
+            },
+               _ => false
+            }
+        }).is_some_and(|x| match x {
+            MatchResult::Match(car) => {
+                content.push(car);
+                true
+            },
+            MatchResult::NotMatch(_) => {
+                false
+            }
+        }) {
+        }
+        Ok(Token::new(TokenType::Number, content))
     }
 
     pub fn new_from_scanner(scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
@@ -138,26 +206,8 @@ impl Token {
                 '-' => Ok(Token::new(TokenType::Minus, lexem.to_string())),
                 '+' => Ok(Token::new(TokenType::Plus, lexem.to_string())),
                 '*' => Ok(Token::new(TokenType::Star, lexem.to_string())),
-                '"' => {
-                        let mut content = String::new();
-                        content.push(lexem);
-                        while scanner.match_not_char('"').is_some_and(|x| match x {
-                            MatchResult::Match(car) => {
-                                content.push(car);
-                                true
-                            },
-                            MatchResult::NotMatch(car) => {
-                                content.push(car);
-                                false
-                            }
-                        }) {
-                        }
-                        if scanner.get_char().is_some_and(|x| x == '"') {
-                            Ok(Token::new(TokenType::String, content))
-                        } else {
-                            Err(ScannerError::UnterminatedString)
-                        }
-                }
+                '"' => Self::scan_string(lexem, scanner),
+                '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => Self::scan_number(lexem, scanner),
                 '/' => {
                     if scanner.match_char('/').is_some_and(|x| x) {
                         while scanner.match_not_char('\n').is_some_and(|x| match x {
@@ -312,6 +362,20 @@ impl<'a> Scanner for LoxScanner<'a> {
             }
         }
         None
+    }
+
+
+    fn match_with_fn(& mut self, mut match_fn: impl FnMut(char) -> bool) -> Option<MatchResult> {
+        if let Some(x) = self.peek() {
+            if match_fn(x) {
+                self.current += 1;
+                return Some(MatchResult::Match(x));
+            } else {
+                return Some(MatchResult::NotMatch(x));
+            }
+        }
+        None
+
     }
 }
 
