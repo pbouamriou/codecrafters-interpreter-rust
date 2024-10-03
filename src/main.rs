@@ -30,6 +30,7 @@ enum TokenType {
     Space,
     Tab,
     NewLine,
+    String,
     EOF
 }
 
@@ -79,19 +80,31 @@ impl fmt::Display for TokenType {
             TokenType::Space => write!(f, "|SPACE|"),
             TokenType::Tab => write!(f, "|TAB|"),
             TokenType::NewLine => write!(f, "|NEWLINE|"),
+            TokenType::String => write!(f, "STRING"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
 }
 
+pub enum MatchResult {
+    Match(char),
+    NotMatch(char),
+}
+
+pub enum ScannerError {
+    UnexpectedCaracter,
+    UnterminatedString,
+}
+
 struct Token {
     token_type: TokenType,
     lexem: String,
+    evaluation: String,
     is_filtered: bool
 }
 pub trait Scanner {
     fn match_char(& mut self, character: char) -> Option<bool>;
-    fn match_not_char(& mut self, character: char) -> Option<bool>;
+    fn match_not_char(& mut self, character: char) -> Option<MatchResult>;
     fn get_char(& mut self) -> Option<char>;
 }
 
@@ -99,78 +112,107 @@ impl Token {
 
     pub fn new(token_type: TokenType, lexem: String ) -> Self {
         let is_filtered =  token_type == TokenType::Comment || token_type == TokenType::Space || token_type == TokenType::Tab || token_type == TokenType::NewLine;
+        let mut evaluation = "null".to_string();
+        if token_type == TokenType::String {
+            let x : Vec<&str> = lexem.split('"').collect();
+            evaluation = x.get(1).unwrap().to_string();
+        }
         Self {
             token_type,
             lexem,
+            evaluation,
             is_filtered
         }
     }
 
-    pub fn new_from_scanner(scanner: &mut impl Scanner) -> Option<Self>  {
+    pub fn new_from_scanner(scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
         if let Some(lexem) =  scanner.get_char() {
             writeln!(io::stderr(), "character {}", lexem).unwrap();
             match lexem {
-                ')' => Some(Token::new(TokenType::RightParent, lexem.to_string())),
-                '(' => Some(Token::new(TokenType::LeftParent,lexem.to_string())),
-                '}' => Some(Token::new(TokenType::RightBrace, lexem.to_string())),
-                '{' => Some(Token::new(TokenType::LeftBrace, lexem.to_string())),
-                ',' => Some(Token::new(TokenType::Comma, lexem.to_string())),
-                '.' => Some(Token::new(TokenType::Dot, lexem.to_string())),
-                '-' => Some(Token::new(TokenType::Minus, lexem.to_string())),
-                '+' => Some(Token::new(TokenType::Plus, lexem.to_string())),
-                '*' => Some(Token::new(TokenType::Star, lexem.to_string())),
+                ')' => Ok(Token::new(TokenType::RightParent, lexem.to_string())),
+                '(' => Ok(Token::new(TokenType::LeftParent,lexem.to_string())),
+                '}' => Ok(Token::new(TokenType::RightBrace, lexem.to_string())),
+                '{' => Ok(Token::new(TokenType::LeftBrace, lexem.to_string())),
+                ',' => Ok(Token::new(TokenType::Comma, lexem.to_string())),
+                '.' => Ok(Token::new(TokenType::Dot, lexem.to_string())),
+                '-' => Ok(Token::new(TokenType::Minus, lexem.to_string())),
+                '+' => Ok(Token::new(TokenType::Plus, lexem.to_string())),
+                '*' => Ok(Token::new(TokenType::Star, lexem.to_string())),
+                '"' => {
+                        let mut content = String::new();
+                        content.push(lexem);
+                        while scanner.match_not_char('"').is_some_and(|x| match x {
+                            MatchResult::Match(car) => {
+                                content.push(car);
+                                true
+                            },
+                            MatchResult::NotMatch(car) => {
+                                content.push(car);
+                                false
+                            }
+                        }) {
+                        }
+                        if scanner.get_char().is_some_and(|x| x == '"') {
+                            Ok(Token::new(TokenType::String, content))
+                        } else {
+                            Err(ScannerError::UnterminatedString)
+                        }
+                }
                 '/' => {
                     if scanner.match_char('/').is_some_and(|x| x) {
-                        while scanner.match_not_char('\n').is_some_and(|x| x) {
+                        while scanner.match_not_char('\n').is_some_and(|x| match x {
+                            MatchResult::Match(_) => true,
+                            MatchResult::NotMatch(_) => false,
+                        }) {
                         }
-                        Some(Token::new(TokenType::Comment, "".to_string()))
+                        Ok(Token::new(TokenType::Comment, "".to_string()))
                     } else {
-                        Some(Token::new(TokenType::Slash, lexem.to_string()))
+                        Ok(Token::new(TokenType::Slash, lexem.to_string()))
                     }
                 },
-                ';' => Some(Token::new(TokenType::SemiColon, lexem.to_string())),
+                ';' => Ok(Token::new(TokenType::SemiColon, lexem.to_string())),
                 '=' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Some(Token::new(TokenType::EqualEqual, "==".to_string()))
+                        Ok(Token::new(TokenType::EqualEqual, "==".to_string()))
                     } else {
-                        Some(Token::new(TokenType::Equal, lexem.to_string()))
+                        Ok(Token::new(TokenType::Equal, lexem.to_string()))
                     }
                 }
                 '!' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Some(Token::new(TokenType::BangEqual, "!=".to_string()))
+                        Ok(Token::new(TokenType::BangEqual, "!=".to_string()))
                     } else {
-                        Some(Token::new(TokenType::Bang, lexem.to_string()))
+                        Ok(Token::new(TokenType::Bang, lexem.to_string()))
                     }
                 }
                 '<' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Some(Token::new(TokenType::LessEqual, "<=".to_string()))
+                        Ok(Token::new(TokenType::LessEqual, "<=".to_string()))
                     } else {
-                        Some(Token::new(TokenType::Less, lexem.to_string()))
+                        Ok(Token::new(TokenType::Less, lexem.to_string()))
                     }
                 }
                 '>' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Some(Token::new(TokenType::GreaterEqual, ">=".to_string()))
+                        Ok(Token::new(TokenType::GreaterEqual, ">=".to_string()))
                     } else {
-                        Some(Token::new(TokenType::Greater, lexem.to_string()))
+                        Ok(Token::new(TokenType::Greater, lexem.to_string()))
                     }
                 }
-                '\t' => Some(Token::new(TokenType::Tab, lexem.to_string())),
-                ' ' => Some(Token::new(TokenType::Space, lexem.to_string())),
-                '\n' | '\r' => Some(Token::new(TokenType::NewLine, lexem.to_string())),
-                _ => None
+                '\t' => Ok(Token::new(TokenType::Tab, lexem.to_string())),
+                ' ' => Ok(Token::new(TokenType::Space, lexem.to_string())),
+                '\n' | '\r' => Ok(Token::new(TokenType::NewLine, lexem.to_string())),
+                _ => Err(ScannerError::UnexpectedCaracter)
             }
         } else {
-            Some(Token::new(TokenType::EOF, "".to_string()))
+            Ok(Token::new(TokenType::EOF, "".to_string()))
         }
     }
 }
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} null", self.token_type, self.lexem)
+        write!(f, "{} {} {}", self.token_type, self.lexem, self.evaluation)
     }
 }
 
@@ -194,14 +236,26 @@ impl<'a> LoxScanner<'a> {
                 if character == '\n' {
                     line_number += 1
                 }
-                if let Some(x) = Token::new_from_scanner(self) {
-                    if !x.is_filtered {
-                        tokens.push(x);
+                match Token::new_from_scanner(self) {
+                    Ok(x) => {
+                        if !x.is_filtered {
+                            tokens.push(x);
+                        }
+                    },
+                    Err(err) => {
+                        match err {
+                            ScannerError::UnexpectedCaracter => {
+                                if character != '\n' && character != '\r' {
+                                    writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
+                                    error = true
+                                }
+                            },
+                            ScannerError::UnterminatedString => {
+                                    writeln!(io::stderr(), "[line {}] Error: Unterminated string.", line_number).unwrap();
+                                    error = true
+                            }
+                        }
                     }
-                }
-                else if character != '\n' && character != '\r' {
-                    writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
-                    error = true
                 }
             } else {
                 tokens.push(Token::new(TokenType::EOF, "".to_string() ));
@@ -248,13 +302,13 @@ impl<'a> Scanner for LoxScanner<'a> {
         None
     }
 
-    fn match_not_char(& mut self, character: char) -> Option<bool> {
+    fn match_not_char(& mut self, character: char) -> Option<MatchResult> {
         if let Some(x) = self.peek() {
             if x != character {
                 self.current += 1;
-                return Some(true);
+                return Some(MatchResult::Match(x));
             } else {
-                return Some(false);
+                return Some(MatchResult::NotMatch(x));
             }
         }
         None
