@@ -33,6 +33,22 @@ enum TokenType {
     String,
     Number,
     Identifier,
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Function,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
     EOF
 }
 
@@ -85,6 +101,22 @@ impl fmt::Display for TokenType {
             TokenType::String => write!(f, "STRING"),
             TokenType::Number => write!(f, "NUMBER"),
             TokenType::Identifier => write!(f, "IDENTIFIER"),
+            TokenType::And => write!(f, "AND"),
+            TokenType::Class => write!(f, "CLASS"),
+            TokenType::Else => write!(f, "ELSE"),
+            TokenType::False => write!(f, "FALSE"),
+            TokenType::For => write!(f, "FOR"),
+            TokenType::Function => write!(f, "FUN"),
+            TokenType::If => write!(f, "IF"),
+            TokenType::Nil => write!(f, "NIL"),
+            TokenType::Or => write!(f, "OR"),
+            TokenType::Print => write!(f, "PRINT"),
+            TokenType::Return => write!(f, "RETURN"),
+            TokenType::Super => write!(f, "SUPER"),
+            TokenType::This => write!(f, "THIS"),
+            TokenType::True => write!(f, "TRUE"),
+            TokenType::Var => write!(f, "VAR"),
+            TokenType::While => write!(f, "WHILE"),
             TokenType::EOF => write!(f, "EOF"),
         }
     }
@@ -184,7 +216,25 @@ impl Token {
             }
         }) {
         }
-        Ok(Token::new(TokenType::Identifier, content))
+        match content.as_str() {
+            "and" => Ok(Token::new(TokenType::And, content)),
+            "class" => Ok(Token::new(TokenType::Class, content)),
+            "else" => Ok(Token::new(TokenType::Else, content)),
+            "false" => Ok(Token::new(TokenType::False, content)),
+            "for" => Ok(Token::new(TokenType::For, content)),
+            "fun" => Ok(Token::new(TokenType::Function, content)),
+            "if" => Ok(Token::new(TokenType::If, content)),
+            "nil" => Ok(Token::new(TokenType::Nil, content)),
+            "or" => Ok(Token::new(TokenType::Or, content)),
+            "print" => Ok(Token::new(TokenType::Print, content)),
+            "return" => Ok(Token::new(TokenType::Return, content)),
+            "super" => Ok(Token::new(TokenType::Super, content)),
+            "this" => Ok(Token::new(TokenType::This, content)),
+            "true" => Ok(Token::new(TokenType::True, content)),
+            "var" => Ok(Token::new(TokenType::Var, content)),
+            "while" => Ok(Token::new(TokenType::While, content)),
+            _ => Ok(Token::new(TokenType::Identifier, content))
+        }
     }
 
     fn scan_number(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
