@@ -4,6 +4,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::process::Termination;
 use std::process::ExitCode;
+use std::rc::Rc;
 
 #[derive(PartialEq, Clone, Copy)]
 enum TokenType {
@@ -56,6 +57,7 @@ enum ApplicationErrorCode {
     UnexpectedCaracter = 65,
     WrongNumberOfParameters = 1,
     UnknownCommand = 2,
+    UnexpectedToken = 3,
 }
 enum AppExitCode {
     Ok,
@@ -138,6 +140,8 @@ struct Token {
     evaluation: String,
     is_filtered: bool
 }
+
+
 pub trait Scanner {
     fn match_char(& mut self, character: char) -> Option<bool>;
     fn match_not_char(& mut self, character: char) -> Option<MatchResult>;
@@ -268,7 +272,6 @@ impl Token {
 
     pub fn new_from_scanner(scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
         if let Some(lexem) =  scanner.get_char() {
-            writeln!(io::stderr(), "character {}", lexem).unwrap();
             match lexem {
                 ')' => Ok(Token::new(TokenType::RightParent, lexem.to_string())),
                 '(' => Ok(Token::new(TokenType::LeftParent,lexem.to_string())),
@@ -351,8 +354,8 @@ impl<'a> LoxScanner<'a> {
         Self { current: 0, source: contents }
     }
 
-    pub fn tokenize(& mut self) -> Result<Vec<Token>, Vec<Token>> {
-        let mut tokens: Vec<Token> = Vec::new();
+    pub fn tokenize(& mut self) -> Result<Vec<Rc<Token>>, Vec<Rc<Token>>> {
+        let mut tokens: Vec<Rc<Token>> = Vec::new();
         let mut line_number = 1;
         let mut error = false;
         loop {
@@ -363,7 +366,7 @@ impl<'a> LoxScanner<'a> {
                 match Token::new_from_scanner(self) {
                     Ok(x) => {
                         if !x.is_filtered {
-                            tokens.push(x);
+                            tokens.push(Rc::new(x));
                         }
                     },
                     Err(err) => {
@@ -382,7 +385,7 @@ impl<'a> LoxScanner<'a> {
                     }
                 }
             } else {
-                tokens.push(Token::new(TokenType::EOF, "".to_string() ));
+                tokens.push(Rc::new(Token::new(TokenType::EOF, "".to_string() )));
                 break;
             }
         }
@@ -453,6 +456,105 @@ impl<'a> Scanner for LoxScanner<'a> {
     }
 }
 
+pub trait Ast {
+    fn print(&self);
+}
+
+struct BinaryExpr {
+    operator: Rc<Token>,
+    left: Rc<Token>,
+    right: Rc<Token>,
+}
+
+struct UnaryExpr {
+    operator: Rc<Token>,
+    right: Rc<Token>,
+}
+
+enum Expr {
+    Primary(Rc<Token>),
+    Binary(BinaryExpr),
+    Unary(UnaryExpr),
+}
+
+impl Expr {
+    fn print(&self) {
+        match self {
+            Expr::Primary(token) => {
+                println!("{}", token.lexem)
+            }
+            _ => {}
+        }
+    }
+}
+
+struct LoxAst {
+    root: Expr
+}
+
+impl Ast for LoxAst {
+    fn print(&self) {
+        self.root.print()
+    }
+}
+
+enum ParserError {
+    NotImplemented
+}
+
+struct LoxParser {
+    current: usize,
+    tokens: Vec<Rc<Token>>,
+} 
+
+impl LoxParser {
+    pub fn new(tokens: Vec<Rc<Token>>) -> Self {
+        Self {
+            current: 0,
+            tokens
+        }
+    }
+
+    pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
+        Ok(LoxAst{root: self.primary().unwrap()})
+    }
+
+    fn primary(&mut self) -> Option<Expr> {
+        if let Some(token) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::False | TokenType::True | TokenType::Nil => true,
+                _ => false
+            }
+        }) {
+            Some(Expr::Primary(token))
+        } else {
+            None
+        }
+    }
+
+    fn match_cond(&mut self, cond: impl Fn(Rc<Token>) -> bool) -> Option<Rc<Token>> {
+        if let Some(token) = self.peek() {
+            if cond(token.clone()) {
+                self.current += 1;
+                return Some(token);
+            }
+        }
+        None
+    }
+
+    fn peek(&self) -> Option<Rc<Token>> {
+        if self.current >= self.tokens.len() {
+            return None;
+        }
+        let item = self.tokens.get(self.current);
+        match item {
+            Some(x) => Some(x.clone()),
+            None => None
+        }
+    }
+    
+}
+
 fn main() -> AppExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -488,6 +590,26 @@ fn main() -> AppExitCode {
                     }
                     return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                 }
+            }
+        }
+        "parse" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                String::new()
+            });
+
+            let mut scanner = LoxScanner::new(&file_contents);
+
+            match scanner.tokenize() {
+                Ok(tokens) => {
+                    let mut parser = LoxParser::new(tokens);
+                    match parser.parse() {
+                        Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedToken),
+                        Ok(ast) => ast.print(),
+                    }
+                    return AppExitCode::Ok
+                }
+                Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
             }
         }
         _ => {
