@@ -153,7 +153,7 @@ impl Token {
 
     pub fn new(token_type: TokenType, lexem: String ) -> Self {
         let is_filtered =  token_type == TokenType::Comment || token_type == TokenType::Space || token_type == TokenType::Tab || token_type == TokenType::NewLine;
-        let mut evaluation = "null".to_string();
+        let mut evaluation = "".to_string();
         match token_type {
             TokenType::String => {
                 let x : Vec<&str> = lexem.split('"').collect();
@@ -178,6 +178,22 @@ impl Token {
             lexem,
             evaluation,
             is_filtered
+        }
+    }
+
+    pub fn parse<'a>(&'a self) -> &'a String {
+        if self.evaluation.len() > 0 {
+            &self.evaluation
+        } else {
+            &self.lexem
+        }
+    }
+    
+    pub fn evaluate<'a>(&'a self) -> &'a str {
+        if self.evaluation.len() > 0 {
+            &self.evaluation
+        } else {
+            &"null"
         }
     }
 
@@ -339,7 +355,7 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.token_type, self.lexem, self.evaluation)
+        write!(f, "{} {} {}", self.token_type, self.lexem, self.evaluate())
     }
 }
 
@@ -481,7 +497,7 @@ impl Expr {
     fn print(&self) {
         match self {
             Expr::Primary(token) => {
-                println!("{}", token.lexem)
+                println!("{}", *token.parse())
             }
             _ => {}
         }
@@ -522,7 +538,7 @@ impl LoxParser {
     fn primary(&mut self) -> Option<Expr> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
-                TokenType::False | TokenType::True | TokenType::Nil => true,
+                TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number => true,
                 _ => false
             }
         }) {
