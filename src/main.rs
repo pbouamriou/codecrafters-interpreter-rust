@@ -484,7 +484,7 @@ struct BinaryExpr {
 
 struct UnaryExpr {
     operator: Rc<Token>,
-    right: Rc<Token>,
+    right: Box<Expr>,
 }
 
 struct GroupExpr {
@@ -503,9 +503,12 @@ impl fmt::Display for Expr {
         match self {
             Expr::Primary(token) => {
                 write!(f, "{}", *token.parse())
-            },
+            }
             Expr::Group(expr) => {
                 write!(f, "(group {})", expr.expr)
+            }
+            Expr::Unary(expr) => {
+                write!(f, "({} {})", expr.operator.parse(), expr.right)
             }
             _ => write!(f, "")
         }
@@ -543,6 +546,23 @@ impl LoxParser {
         Ok(LoxAst{root: self.primary().unwrap()})
     }
 
+    fn negate(&mut self) -> Option<Expr> {
+        if let Some(token) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::Bang | TokenType::Minus => true,
+                _ => false
+            }
+        }) {
+            if let Some(prim) = self.primary() {
+                Some(Expr::Unary(UnaryExpr{operator: token, right: Box::new(prim)}))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     fn group(&mut self) -> Option<Expr> {
         if let Some(_) = self.match_cond(|x| {
             match x.token_type {
@@ -566,7 +586,7 @@ impl LoxParser {
             }
         }
         else {
-            None
+            self.negate()
         }
     }
 
