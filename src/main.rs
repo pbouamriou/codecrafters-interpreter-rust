@@ -538,7 +538,7 @@ impl LoxParser {
     fn primary(&mut self) -> Option<Expr> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
-                TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number => true,
+                TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number | TokenType::String => true,
                 _ => false
             }
         }) {
