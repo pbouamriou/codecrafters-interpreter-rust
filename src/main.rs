@@ -487,19 +487,27 @@ struct UnaryExpr {
     right: Rc<Token>,
 }
 
+struct GroupExpr {
+    expr: Box<Expr>,
+}
+
 enum Expr {
     Primary(Rc<Token>),
     Binary(BinaryExpr),
     Unary(UnaryExpr),
+    Group(GroupExpr),
 }
 
-impl Expr {
-    fn print(&self) {
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::Primary(token) => {
-                println!("{}", *token.parse())
+                write!(f, "{}", *token.parse())
+            },
+            Expr::Group(expr) => {
+                write!(f, "(group {})", expr.expr)
             }
-            _ => {}
+            _ => write!(f, "")
         }
     }
 }
@@ -510,7 +518,7 @@ struct LoxAst {
 
 impl Ast for LoxAst {
     fn print(&self) {
-        self.root.print()
+        println!("{}", self.root)
     }
 }
 
@@ -535,6 +543,33 @@ impl LoxParser {
         Ok(LoxAst{root: self.primary().unwrap()})
     }
 
+    fn group(&mut self) -> Option<Expr> {
+        if let Some(_) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::LeftParent => true,
+                _ => false
+            }
+        }) {
+            if let Some(prim) = self.primary() {
+                if let Some(_) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::RightParent => true,
+                        _ => false
+                    }
+                }) {
+                    Some(Expr::Group(GroupExpr{expr: Box::new(prim)}))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        else {
+            None
+        }
+    }
+
     fn primary(&mut self) -> Option<Expr> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
@@ -544,7 +579,7 @@ impl LoxParser {
         }) {
             Some(Expr::Primary(token))
         } else {
-            None
+            self.group()
         }
     }
 
