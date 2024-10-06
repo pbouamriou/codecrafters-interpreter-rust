@@ -546,10 +546,28 @@ impl LoxParser {
     }
 
     pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
-        match self.term() {
+        match self.condition() {
             Some(ast) => Ok(LoxAst{root: ast}),
             None => Err(ParserError::NotImplemented)
         }
+    }
+
+    fn condition(&mut self) -> Option<Expr> {
+        if let Some(expr) = self.term() {
+            let mut expr = expr;
+            while let Some(token) = self.match_cond(|x| {
+                match x.token_type {
+                    TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => true,
+                    _ => false
+                }
+            }) {
+                if let Some(prim) = self.term() {
+                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
+                }
+            }
+            return Some(expr);
+        }
+        None
     }
 
     fn term(&mut self) -> Option<Expr> {
