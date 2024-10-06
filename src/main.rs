@@ -514,7 +514,6 @@ impl fmt::Display for Expr {
             Expr::Binary(expr) => {
                 write!(f, "({} {} {})", expr.operator.parse(), expr.left, expr.right)
             }
-            _ => write!(f, "")
         }
     }
 }
@@ -547,7 +546,28 @@ impl LoxParser {
     }
 
     pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
-        Ok(LoxAst{root: self.factor().unwrap()})
+        match self.term() {
+            Some(ast) => Ok(LoxAst{root: ast}),
+            None => Err(ParserError::NotImplemented)
+        }
+    }
+
+    fn term(&mut self) -> Option<Expr> {
+        if let Some(expr) = self.factor() {
+            let mut expr = expr;
+            while let Some(token) = self.match_cond(|x| {
+                match x.token_type {
+                    TokenType::Plus | TokenType::Minus => true,
+                    _ => false
+                }
+            }) {
+                if let Some(prim) = self.factor() {
+                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
+                }
+            }
+            return Some(expr);
+        }
+        None
     }
     
     fn factor(&mut self) -> Option<Expr> {
@@ -605,7 +625,7 @@ impl LoxParser {
                 _ => false
             }
         }) {
-            if let Some(prim) = self.factor() {
+            if let Some(prim) = self.term() {
                 if let Some(_) = self.match_cond(|x| {
                     match x.token_type {
                         TokenType::RightParent => true,
