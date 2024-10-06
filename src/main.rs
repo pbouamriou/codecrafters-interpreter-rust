@@ -57,7 +57,6 @@ enum ApplicationErrorCode {
     UnexpectedCaracter = 65,
     WrongNumberOfParameters = 1,
     UnknownCommand = 2,
-    UnexpectedToken = 3,
 }
 enum AppExitCode {
     Ok,
@@ -138,7 +137,8 @@ struct Token {
     token_type: TokenType,
     lexem: String,
     evaluation: String,
-    is_filtered: bool
+    is_filtered: bool,
+    position: Position,
 }
 
 
@@ -147,11 +147,12 @@ pub trait Scanner {
     fn match_not_char(& mut self, character: char) -> Option<MatchResult>;
     fn match_with_fn(& mut self, match_fn: impl FnMut(char) -> bool) -> Option<MatchResult>;
     fn get_char(& mut self) -> Option<char>;
+    fn get_position(&self) -> Position;
 }
 
 impl Token {
 
-    pub fn new(token_type: TokenType, lexem: String ) -> Self {
+    pub fn new(token_type: TokenType, lexem: String, position: Position ) -> Self {
         let is_filtered =  token_type == TokenType::Comment || token_type == TokenType::Space || token_type == TokenType::Tab || token_type == TokenType::NewLine;
         let mut evaluation = "".to_string();
         match token_type {
@@ -177,7 +178,8 @@ impl Token {
             token_type,
             lexem,
             evaluation,
-            is_filtered
+            is_filtered,
+            position
         }
     }
 
@@ -212,7 +214,7 @@ impl Token {
         }) {
         }
         if scanner.get_char().is_some_and(|x| x == '"') {
-            Ok(Token::new(TokenType::String, content))
+            Ok(Token::new(TokenType::String, content, scanner.get_position()))
         } else {
             Err(ScannerError::UnterminatedString)
         }
@@ -236,24 +238,25 @@ impl Token {
             }
         }) {
         }
+        let position = scanner.get_position();
         match content.as_str() {
-            "and" => Ok(Token::new(TokenType::And, content)),
-            "class" => Ok(Token::new(TokenType::Class, content)),
-            "else" => Ok(Token::new(TokenType::Else, content)),
-            "false" => Ok(Token::new(TokenType::False, content)),
-            "for" => Ok(Token::new(TokenType::For, content)),
-            "fun" => Ok(Token::new(TokenType::Function, content)),
-            "if" => Ok(Token::new(TokenType::If, content)),
-            "nil" => Ok(Token::new(TokenType::Nil, content)),
-            "or" => Ok(Token::new(TokenType::Or, content)),
-            "print" => Ok(Token::new(TokenType::Print, content)),
-            "return" => Ok(Token::new(TokenType::Return, content)),
-            "super" => Ok(Token::new(TokenType::Super, content)),
-            "this" => Ok(Token::new(TokenType::This, content)),
-            "true" => Ok(Token::new(TokenType::True, content)),
-            "var" => Ok(Token::new(TokenType::Var, content)),
-            "while" => Ok(Token::new(TokenType::While, content)),
-            _ => Ok(Token::new(TokenType::Identifier, content))
+            "and" => Ok(Token::new(TokenType::And, content, position)),
+            "class" => Ok(Token::new(TokenType::Class, content, position)),
+            "else" => Ok(Token::new(TokenType::Else, content, position)),
+            "false" => Ok(Token::new(TokenType::False, content, position)),
+            "for" => Ok(Token::new(TokenType::For, content, position)),
+            "fun" => Ok(Token::new(TokenType::Function, content, position)),
+            "if" => Ok(Token::new(TokenType::If, content, position)),
+            "nil" => Ok(Token::new(TokenType::Nil, content, position)),
+            "or" => Ok(Token::new(TokenType::Or, content, position)),
+            "print" => Ok(Token::new(TokenType::Print, content, position)),
+            "return" => Ok(Token::new(TokenType::Return, content, position)),
+            "super" => Ok(Token::new(TokenType::Super, content, position)),
+            "this" => Ok(Token::new(TokenType::This, content, position)),
+            "true" => Ok(Token::new(TokenType::True, content, position)),
+            "var" => Ok(Token::new(TokenType::Var, content, position)),
+            "while" => Ok(Token::new(TokenType::While, content, position)),
+            _ => Ok(Token::new(TokenType::Identifier, content, position))
         }
     }
 
@@ -283,21 +286,22 @@ impl Token {
             }
         }) {
         }
-        Ok(Token::new(TokenType::Number, content))
+        Ok(Token::new(TokenType::Number, content, scanner.get_position()))
     }
 
     pub fn new_from_scanner(scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
         if let Some(lexem) =  scanner.get_char() {
+            let position = scanner.get_position();
             match lexem {
-                ')' => Ok(Token::new(TokenType::RightParent, lexem.to_string())),
-                '(' => Ok(Token::new(TokenType::LeftParent,lexem.to_string())),
-                '}' => Ok(Token::new(TokenType::RightBrace, lexem.to_string())),
-                '{' => Ok(Token::new(TokenType::LeftBrace, lexem.to_string())),
-                ',' => Ok(Token::new(TokenType::Comma, lexem.to_string())),
-                '.' => Ok(Token::new(TokenType::Dot, lexem.to_string())),
-                '-' => Ok(Token::new(TokenType::Minus, lexem.to_string())),
-                '+' => Ok(Token::new(TokenType::Plus, lexem.to_string())),
-                '*' => Ok(Token::new(TokenType::Star, lexem.to_string())),
+                ')' => Ok(Token::new(TokenType::RightParent, lexem.to_string(), position)),
+                '(' => Ok(Token::new(TokenType::LeftParent,lexem.to_string(), position)),
+                '}' => Ok(Token::new(TokenType::RightBrace, lexem.to_string(), position)),
+                '{' => Ok(Token::new(TokenType::LeftBrace, lexem.to_string(), position)),
+                ',' => Ok(Token::new(TokenType::Comma, lexem.to_string(), position)),
+                '.' => Ok(Token::new(TokenType::Dot, lexem.to_string(), position)),
+                '-' => Ok(Token::new(TokenType::Minus, lexem.to_string(), position)),
+                '+' => Ok(Token::new(TokenType::Plus, lexem.to_string(), position)),
+                '*' => Ok(Token::new(TokenType::Star, lexem.to_string(), position)),
                 '"' => Self::scan_string(lexem, scanner),
                 'a'..='z' | 'A'..='Z' | '_' => Self::scan_identifier(lexem, scanner),
                 '0'..='9' => Self::scan_number(lexem, scanner),
@@ -308,47 +312,47 @@ impl Token {
                             MatchResult::NotMatch(_) => false,
                         }) {
                         }
-                        Ok(Token::new(TokenType::Comment, "".to_string()))
+                        Ok(Token::new(TokenType::Comment, "".to_string(), position))
                     } else {
-                        Ok(Token::new(TokenType::Slash, lexem.to_string()))
+                        Ok(Token::new(TokenType::Slash, lexem.to_string(), position))
                     }
                 },
-                ';' => Ok(Token::new(TokenType::SemiColon, lexem.to_string())),
+                ';' => Ok(Token::new(TokenType::SemiColon, lexem.to_string(), position)),
                 '=' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Ok(Token::new(TokenType::EqualEqual, "==".to_string()))
+                        Ok(Token::new(TokenType::EqualEqual, "==".to_string(), position))
                     } else {
-                        Ok(Token::new(TokenType::Equal, lexem.to_string()))
+                        Ok(Token::new(TokenType::Equal, lexem.to_string(), position))
                     }
                 }
                 '!' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Ok(Token::new(TokenType::BangEqual, "!=".to_string()))
+                        Ok(Token::new(TokenType::BangEqual, "!=".to_string(), position))
                     } else {
-                        Ok(Token::new(TokenType::Bang, lexem.to_string()))
+                        Ok(Token::new(TokenType::Bang, lexem.to_string(), position))
                     }
                 }
                 '<' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Ok(Token::new(TokenType::LessEqual, "<=".to_string()))
+                        Ok(Token::new(TokenType::LessEqual, "<=".to_string(), position))
                     } else {
-                        Ok(Token::new(TokenType::Less, lexem.to_string()))
+                        Ok(Token::new(TokenType::Less, lexem.to_string(), position))
                     }
                 }
                 '>' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Ok(Token::new(TokenType::GreaterEqual, ">=".to_string()))
+                        Ok(Token::new(TokenType::GreaterEqual, ">=".to_string(), position))
                     } else {
-                        Ok(Token::new(TokenType::Greater, lexem.to_string()))
+                        Ok(Token::new(TokenType::Greater, lexem.to_string(), position))
                     }
                 }
-                '\t' => Ok(Token::new(TokenType::Tab, lexem.to_string())),
-                ' ' => Ok(Token::new(TokenType::Space, lexem.to_string())),
-                '\n' | '\r' => Ok(Token::new(TokenType::NewLine, lexem.to_string())),
+                '\t' => Ok(Token::new(TokenType::Tab, lexem.to_string(), position)),
+                ' ' => Ok(Token::new(TokenType::Space, lexem.to_string(), position)),
+                '\n' | '\r' => Ok(Token::new(TokenType::NewLine, lexem.to_string(), position)),
                 _ => Err(ScannerError::UnexpectedCaracter)
             }
         } else {
-            Ok(Token::new(TokenType::EOF, "".to_string()))
+            Ok(Token::new(TokenType::EOF, "".to_string(), scanner.get_position()))
         }
     }
 }
@@ -359,26 +363,29 @@ impl fmt::Display for Token {
     }
 }
 
+#[derive(Clone)]
+pub struct Position {
+    line_number: u32,
+    position : u32,
+}
+
 
 struct LoxScanner<'a> {
     current: usize,
+    position: Position,
     source: &'a str
 }
 
 impl<'a> LoxScanner<'a> {
     pub fn new(contents: &'a str) -> Self {
-        Self { current: 0, source: contents }
+        Self { current: 0, source: contents, position: Position{line_number: 1, position: 1} }
     }
 
     pub fn tokenize(& mut self) -> Result<Vec<Rc<Token>>, Vec<Rc<Token>>> {
         let mut tokens: Vec<Rc<Token>> = Vec::new();
-        let mut line_number = 1;
         let mut error = false;
         loop {
             if let Some(character) = self.peek() {
-                if character == '\n' {
-                    line_number += 1
-                }
                 match Token::new_from_scanner(self) {
                     Ok(x) => {
                         if !x.is_filtered {
@@ -389,19 +396,19 @@ impl<'a> LoxScanner<'a> {
                         match err {
                             ScannerError::UnexpectedCaracter => {
                                 if character != '\n' && character != '\r' {
-                                    writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line_number, character).unwrap();
+                                    writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", self.get_position().line_number, character).unwrap();
                                     error = true
                                 }
                             },
                             ScannerError::UnterminatedString => {
-                                    writeln!(io::stderr(), "[line {}] Error: Unterminated string.", line_number).unwrap();
+                                    writeln!(io::stderr(), "[line {}] Error: Unterminated string.", self.get_position().line_number).unwrap();
                                     error = true
                             }
                         }
                     }
                 }
             } else {
-                tokens.push(Rc::new(Token::new(TokenType::EOF, "".to_string() )));
+                tokens.push(Rc::new(Token::new(TokenType::EOF, "".to_string(), self.get_position() )));
                 break;
             }
         }
@@ -427,10 +434,19 @@ impl<'a> LoxScanner<'a> {
 impl<'a> Scanner for LoxScanner<'a> {
     fn get_char(& mut self) -> Option<char> {
         let x = self.peek();
-        if let Some(_) = x {
+        if let Some(character) = x {
             self.current += 1;
+            self.position.position += 1;
+            if character == '\n' {
+                self.position.line_number += 1;
+                self.position.position = 1;
+            }
         }
         x
+    }
+
+    fn get_position(& self) -> Position {
+        self.position.clone()
     }
 
     fn match_char(& mut self, character: char) -> Option<bool> {
@@ -528,8 +544,9 @@ impl Ast for LoxAst {
     }
 }
 
-enum ParserError {
-    NotImplemented
+struct ParserError {
+    token: Rc<Token>,
+    message: String,
 }
 
 struct LoxParser {
@@ -547,137 +564,150 @@ impl LoxParser {
 
     pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
         match self.equality() {
-            Some(ast) => Ok(LoxAst{root: ast}),
-            None => Err(ParserError::NotImplemented)
+            Ok(ast) => Ok(LoxAst{root: ast}),
+            Err(x) => Err(x)
         }
     }
 
-    fn equality(&mut self) -> Option<Expr> {
-        if let Some(expr) = self.condition() {
-            let mut expr = expr;
-            while let Some(token) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::EqualEqual | TokenType::BangEqual => true,
-                    _ => false
+    fn equality(&mut self) -> Result<Expr, ParserError> {
+        match self.condition() {
+            Ok(expr) => {
+                let mut expr = expr;
+                while let Some(token) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::EqualEqual | TokenType::BangEqual => true,
+                        _ => false
+                    }
+                }) {
+                    match self.condition() {
+                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
+                        Err(err) => return Err(err)
+                    }
                 }
-            }) {
-                if let Some(prim) = self.condition() {
-                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
-                }
+                return Ok(expr);
             }
-            return Some(expr);
+            Err(err) => Err(err)
         }
-        None
     }
 
-    fn condition(&mut self) -> Option<Expr> {
-        if let Some(expr) = self.term() {
-            let mut expr = expr;
-            while let Some(token) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => true,
-                    _ => false
+    fn condition(&mut self) -> Result<Expr, ParserError> {
+        match self.term() {
+            Ok(expr) => {
+                let mut expr = expr;
+                while let Some(token) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => true,
+                        _ => false
+                    }
+                }) {
+                    match self.term() {
+                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
+                        Err(err) => return Err(err)
+                    }
                 }
-            }) {
-                if let Some(prim) = self.term() {
-                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
-                }
+                return Ok(expr);
             }
-            return Some(expr);
+            Err(err) => Err(err)
         }
-        None
     }
 
-    fn term(&mut self) -> Option<Expr> {
-        if let Some(expr) = self.factor() {
-            let mut expr = expr;
-            while let Some(token) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::Plus | TokenType::Minus => true,
-                    _ => false
+    fn term(&mut self) -> Result<Expr, ParserError> {
+        match self.factor() {
+            Ok(expr) => {
+                let mut expr = expr;
+                while let Some(token) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::Plus | TokenType::Minus => true,
+                        _ => false
+                    }
+                }) {
+                    match self.factor() {
+                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
+                        Err(err) => return Err(err)
+                    }
                 }
-            }) {
-                if let Some(prim) = self.factor() {
-                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
-                }
+                return Ok(expr);
             }
-            return Some(expr);
+            Err(err) => Err(err)
         }
-        None
-    }
-    
-    fn factor(&mut self) -> Option<Expr> {
-        if let Some(expr) = self.unary() {
-            let mut expr = expr;
-            while let Some(token) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::Slash | TokenType::Star => true,
-                    _ => false
-                }
-            }) {
-                if let Some(prim) = self.unary() {
-                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
-                }
-            }
-            return Some(expr);
-        }
-        None
     }
 
-    fn unary(&mut self) -> Option<Expr> {
+    fn factor(&mut self) -> Result<Expr, ParserError> {
+        match self.unary() {
+            Ok(expr) => {
+                let mut expr = expr;
+                while let Some(token) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::Slash | TokenType::Star => true,
+                        _ => false
+                    }
+                }) {
+                    match self.unary() {
+                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
+                        Err(err) => return Err(err)
+                    }
+                }
+                return Ok(expr);
+            }
+            Err(err) => Err(err)
+        }
+    }
+
+
+    fn unary(&mut self) -> Result<Expr, ParserError> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
                 TokenType::Bang | TokenType::Minus => true,
                 _ => false
             }
         }) {
-            if let Some(prim) = self.unary() {
-                Some(Expr::Unary(UnaryExpr{operator: token, right: Box::new(prim)}))
-            } else {
-                None
+            match self.unary() {
+                Ok(expr) => Ok(Expr::Unary(UnaryExpr{operator: token, right: Box::new(expr)})),
+                Err(x) => Err(x)
             }
         } else {
             self.primary()
         }
     }
 
-    fn primary(&mut self) -> Option<Expr> {
+    fn primary(&mut self) -> Result<Expr, ParserError> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
                 TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number | TokenType::String => true,
                 _ => false
             }
         }) {
-            Some(Expr::Primary(token))
+            Ok(Expr::Primary(token))
         } else {
             self.group()
         }
     }
 
-    fn group(&mut self) -> Option<Expr> {
+    fn group(&mut self) -> Result<Expr, ParserError> {
         if let Some(_) = self.match_cond(|x| {
             match x.token_type {
                 TokenType::LeftParent => true,
                 _ => false
             }
         }) {
-            if let Some(prim) = self.equality() {
-                if let Some(_) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::RightParent => true,
-                        _ => false
+            match self.equality() {
+                Ok(expr) => {
+                    if let Some(_) = self.match_cond(|x| {
+                        match x.token_type {
+                            TokenType::RightParent => true,
+                            _ => false
+                        }
+                    }) {
+                        Ok(Expr::Group(GroupExpr{expr: Box::new(expr)}))
+                    } else {
+                        Err(ParserError{token: self.peek().unwrap(), message: "Expect expression.".to_string()})
                     }
-                }) {
-                    Some(Expr::Group(GroupExpr{expr: Box::new(prim)}))
-                } else {
-                    None
                 }
-            } else {
-                None
+                Err(x) => Err(x)
             }
         }
         else {
-            None
+            Err(ParserError{token: self.peek().unwrap(), message: "Expect expression.".to_string()})
         }
     }
 
@@ -754,7 +784,10 @@ fn main() -> AppExitCode {
                 Ok(tokens) => {
                     let mut parser = LoxParser::new(tokens);
                     match parser.parse() {
-                        Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedToken),
+                        Err(err) => {
+                            writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.position.line_number, err.token.lexem, err.message).unwrap();
+                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                        }
                         Ok(ast) => ast.print(),
                     }
                     return AppExitCode::Ok
