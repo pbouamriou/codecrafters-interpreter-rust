@@ -477,9 +477,9 @@ pub trait Ast {
 }
 
 struct BinaryExpr {
+    left: Rc<Expr>,
     operator: Rc<Token>,
-    left: Rc<Token>,
-    right: Rc<Token>,
+    right: Rc<Expr>,
 }
 
 struct UnaryExpr {
@@ -509,6 +509,10 @@ impl fmt::Display for Expr {
             }
             Expr::Unary(expr) => {
                 write!(f, "({} {})", expr.operator.parse(), expr.right)
+            }
+
+            Expr::Binary(expr) => {
+                write!(f, "({} {} {})", expr.operator.parse(), expr.left, expr.right)
             }
             _ => write!(f, "")
         }
@@ -543,50 +547,41 @@ impl LoxParser {
     }
 
     pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
-        Ok(LoxAst{root: self.primary().unwrap()})
+        Ok(LoxAst{root: self.factor().unwrap()})
+    }
+    
+    fn factor(&mut self) -> Option<Expr> {
+        if let Some(expr) = self.unary() {
+            let mut expr = expr;
+            while let Some(token) = self.match_cond(|x| {
+                match x.token_type {
+                    TokenType::Slash | TokenType::Star => true,
+                    _ => false
+                }
+            }) {
+                if let Some(prim) = self.unary() {
+                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
+                }
+            }
+            return Some(expr);
+        }
+        None
     }
 
-    fn negate(&mut self) -> Option<Expr> {
+    fn unary(&mut self) -> Option<Expr> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
                 TokenType::Bang | TokenType::Minus => true,
                 _ => false
             }
         }) {
-            if let Some(prim) = self.primary() {
+            if let Some(prim) = self.unary() {
                 Some(Expr::Unary(UnaryExpr{operator: token, right: Box::new(prim)}))
             } else {
                 None
             }
         } else {
-            None
-        }
-    }
-
-    fn group(&mut self) -> Option<Expr> {
-        if let Some(_) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::LeftParent => true,
-                _ => false
-            }
-        }) {
-            if let Some(prim) = self.primary() {
-                if let Some(_) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::RightParent => true,
-                        _ => false
-                    }
-                }) {
-                    Some(Expr::Group(GroupExpr{expr: Box::new(prim)}))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
-        else {
-            self.negate()
+            self.primary()
         }
     }
 
@@ -602,6 +597,34 @@ impl LoxParser {
             self.group()
         }
     }
+
+    fn group(&mut self) -> Option<Expr> {
+        if let Some(_) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::LeftParent => true,
+                _ => false
+            }
+        }) {
+            if let Some(prim) = self.factor() {
+                if let Some(_) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::RightParent => true,
+                        _ => false
+                    }
+                }) {
+                    Some(Expr::Group(GroupExpr{expr: Box::new(prim)}))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        else {
+            None
+        }
+    }
+
 
     fn match_cond(&mut self, cond: impl Fn(Rc<Token>) -> bool) -> Option<Rc<Token>> {
         if let Some(token) = self.peek() {
