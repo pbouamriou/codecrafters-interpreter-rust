@@ -546,10 +546,28 @@ impl LoxParser {
     }
 
     pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
-        match self.condition() {
+        match self.equality() {
             Some(ast) => Ok(LoxAst{root: ast}),
             None => Err(ParserError::NotImplemented)
         }
+    }
+
+    fn equality(&mut self) -> Option<Expr> {
+        if let Some(expr) = self.condition() {
+            let mut expr = expr;
+            while let Some(token) = self.match_cond(|x| {
+                match x.token_type {
+                    TokenType::EqualEqual | TokenType::BangEqual => true,
+                    _ => false
+                }
+            }) {
+                if let Some(prim) = self.condition() {
+                    expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(prim)})
+                }
+            }
+            return Some(expr);
+        }
+        None
     }
 
     fn condition(&mut self) -> Option<Expr> {
@@ -643,7 +661,7 @@ impl LoxParser {
                 _ => false
             }
         }) {
-            if let Some(prim) = self.term() {
+            if let Some(prim) = self.equality() {
                 if let Some(_) = self.match_cond(|x| {
                     match x.token_type {
                         TokenType::RightParent => true,
