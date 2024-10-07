@@ -175,6 +175,7 @@ impl Token {
             TokenType::True => EvaluationResult::Boolean(true),
             TokenType::Nil => EvaluationResult::Nil,
             TokenType::Number => EvaluationResult::Number(self.evaluate_str().parse::<f64>().unwrap()),
+            TokenType::String => EvaluationResult::Str(self.evaluate_str().to_string()),
             _ => EvaluationResult::Error,
             
         }
