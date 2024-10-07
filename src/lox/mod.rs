@@ -529,6 +529,8 @@ impl Expr {
             TokenType::Bang => {
                 match expr.right.evaluate() {
                     EvaluationResult::Boolean(x) => EvaluationResult::Boolean(!x),
+                    EvaluationResult::Nil => EvaluationResult::Boolean(true),
+                    EvaluationResult::Number(x) => EvaluationResult::Boolean(x == 0 as f64),
                     _ => EvaluationResult::Error
                 }
             }
@@ -586,6 +588,18 @@ impl Expr {
                 TokenType::EqualEqual | TokenType::BangEqual | TokenType::LessEqual | TokenType::Less | TokenType::Greater | TokenType::GreaterEqual => {
                     if let Some(operation) = Self::get_str_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
+                    } else {
+                        EvaluationResult::Error
+                    }
+                }
+                _ => EvaluationResult::Error
+            }
+        } else if let (EvaluationResult::Nil, EvaluationResult::Nil) = (expr.right.evaluate(), expr.left.evaluate()) {
+            let token_type = expr.operator.token_type;
+            match token_type {
+                TokenType::EqualEqual | TokenType::BangEqual | TokenType::LessEqual | TokenType::Less | TokenType::Greater | TokenType::GreaterEqual => {
+                    if let Some(operation) = Self::get_bool_comparison(token_type) {
+                        EvaluationResult::Boolean(operation(false, false))
                     } else {
                         EvaluationResult::Error
                     }
