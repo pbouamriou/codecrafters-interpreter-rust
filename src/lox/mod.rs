@@ -592,6 +592,13 @@ impl Expr {
                         EvaluationResult::Error
                     }
                 }
+                TokenType::Plus => {
+                    if let Some(operation) = Self::get_str_operation(token_type) {
+                        EvaluationResult::Str(operation(left, right))
+                    } else {
+                        EvaluationResult::Error
+                    }
+                }
                 _ => EvaluationResult::Error
             }
         } else if let (EvaluationResult::Nil, EvaluationResult::Nil) = (expr.right.evaluate(), expr.left.evaluate()) {
@@ -617,6 +624,18 @@ impl Expr {
             TokenType::Star => Some(&|x: f64, y: f64| x * y),
             TokenType::Plus => Some(&|x: f64, y: f64| x + y),
             TokenType::Minus => Some(&|x: f64, y: f64| x - y),
+            _ => None
+        }
+    }
+
+    fn get_str_operation(token_type: TokenType) -> Option<&'static dyn Fn(String,String) -> String> {
+        match token_type {
+            TokenType::Plus => Some(&|x, y| {
+                let mut result = String::new();
+                result.push_str(x.as_str());
+                result.push_str(y.as_str());
+                result
+            }),
             _ => None
         }
     }
