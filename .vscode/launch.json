@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [ "parse", "test.lox"],
+            "args": [ "evaluate", "test.lox"],
             "cwd": "${workspaceFolder}"
         },
         {
