@@ -1,5 +1,7 @@
 mod lox;
 
+use lox::traits::EvaluationResult;
+
 use crate::lox::{LoxParser, LoxScanner};
 use crate::lox::traits::Ast;
 
@@ -11,6 +13,7 @@ use std::io::{self, Write};
 
 enum ApplicationErrorCode {
     UnexpectedCaracter = 65,
+    EvaluationError = 70,
     WrongNumberOfParameters = 1,
     UnknownCommand = 2,
 }
@@ -109,7 +112,13 @@ fn main() -> AppExitCode {
                         }
                         Ok(ast) => {
                             let result = ast.evaluate();
-                            println!("{}", result)
+                            match result {
+                                EvaluationResult::Error(_) => {
+                                    writeln!(io::stderr(), "{}", result).unwrap();
+                                    return AppExitCode::Err(ApplicationErrorCode::EvaluationError)
+                                }
+                                _ => { println!("{}", result); }
+                            }
                         }
                     }
                     return AppExitCode::Ok

@@ -4,54 +4,8 @@ use std::rc::Rc;
 
 pub mod traits;
 
-use traits::{Ast, EvaluationResult, MatchResult, Position, Scanner};
+use traits::{Ast, EvaluationError, EvaluationResult, MatchResult, Position, Scanner, Token, TokenType};
 
-#[derive(PartialEq, Clone, Copy)]
-enum TokenType {
-    LeftParent,
-    RightParent,
-    LeftBrace,
-    RightBrace,
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Star,
-    Slash,
-    SemiColon,
-    EqualEqual,
-    Equal,
-    Bang,
-    BangEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    Comment,
-    Space,
-    Tab,
-    NewLine,
-    String,
-    Number,
-    Identifier,
-    And,
-    Class,
-    Else,
-    False,
-    For,
-    Function,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
-    EOF
-}
 
 
 impl fmt::Display for TokenType {
@@ -110,16 +64,6 @@ pub enum ScannerError {
     UnterminatedString,
 }
 
-pub struct Token {
-    token_type: TokenType,
-    lexem: String,
-    evaluation: String,
-    is_filtered: bool,
-    position: Position,
-}
-
-
-
 impl Token {
 
     fn new(token_type: TokenType, lexem: String, position: Position ) -> Self {
@@ -176,8 +120,7 @@ impl Token {
             TokenType::Nil => EvaluationResult::Nil,
             TokenType::Number => EvaluationResult::Number(self.evaluate_str().parse::<f64>().unwrap()),
             TokenType::String => EvaluationResult::Str(self.evaluate_str().to_string()),
-            _ => EvaluationResult::Error,
-            
+            _ => EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Can't evaluate token".to_string()}),
         }
     }
 
@@ -531,22 +474,23 @@ impl Expr {
                     EvaluationResult::Boolean(x) => EvaluationResult::Boolean(!x),
                     EvaluationResult::Nil => EvaluationResult::Boolean(true),
                     EvaluationResult::Number(x) => EvaluationResult::Boolean(x == 0 as f64),
-                    _ => EvaluationResult::Error
+                    
+                    _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number, boolean, or nil".to_string() })
                 }
             }
             TokenType::Minus => {
                 match expr.right.evaluate() {
                     EvaluationResult::Number(x) => EvaluationResult::Number(-x),
-                    _ => EvaluationResult::Error
+                    _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number".to_string() })
                 }
             }
             TokenType::Plus => {
                 match expr.right.evaluate() {
                     EvaluationResult::Number(x) => EvaluationResult::Number(x),
-                    _ => EvaluationResult::Error
+                    _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number".to_string() })
                 }
             }
-            _ => EvaluationResult::Error
+            _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for unary evaluation".to_string() })
         }
     }
 
@@ -559,17 +503,17 @@ impl Expr {
                     if let Some(operation) = Self::get_float_operation(token_type) {
                         EvaluationResult::Number(operation(left, right))
                     } else {
-                        EvaluationResult::Error
+                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Cannot */-+ right type".to_string() })
                     }
                 }
                 TokenType::EqualEqual | TokenType::BangEqual | TokenType::LessEqual | TokenType::Less | TokenType::Greater | TokenType::GreaterEqual => {
                     if let Some(operation) = Self::get_float_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error
+                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Cannot == != <= < > >= right type".to_string() })
                     }
                 }
-                _ => EvaluationResult::Error
+                _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for binary evaluation".to_string() })
             }
         } else if let (EvaluationResult::Boolean(right), EvaluationResult::Boolean(left)) = evaluation {
             let token_type = expr.operator.token_type;
@@ -578,10 +522,10 @@ impl Expr {
                     if let Some(operation) = Self::get_bool_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error
+                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "bad bool comparison".to_string() })
                     }
                 }
-                _ => EvaluationResult::Error
+                _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for binary evaluation".to_string() })
             }
         } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) = evaluation {
             let token_type = expr.operator.token_type;
@@ -590,17 +534,17 @@ impl Expr {
                     if let Some(operation) = Self::get_str_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error
+                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "bad str comparison".to_string() })
                     }
                 }
                 TokenType::Plus => {
                     if let Some(operation) = Self::get_str_operation(token_type) {
                         EvaluationResult::Str(operation(left, right))
                     } else {
-                        EvaluationResult::Error
+                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "bad str operation".to_string() })
                     }
                 }
-                _ => EvaluationResult::Error
+                _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for binary evaluation".to_string() })
             }
         } else if let (EvaluationResult::Nil, EvaluationResult::Nil) = evaluation {
             let token_type = expr.operator.token_type;
@@ -609,17 +553,17 @@ impl Expr {
                     if let Some(operation) = Self::get_bool_comparison(token_type) {
                         EvaluationResult::Boolean(operation(false, false))
                     } else {
-                        EvaluationResult::Error
+                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "bad bool comparison".to_string() })
                     }
                 }
-                _ => EvaluationResult::Error
+                _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for binary evaluation".to_string() })
             }
         } else {
             let token_type = expr.operator.token_type;
             match token_type {
                 TokenType::EqualEqual => EvaluationResult::Boolean(!Self::is_different_type(evaluation)),
                 TokenType::BangEqual => EvaluationResult::Boolean(Self::is_different_type(evaluation)),
-                _ => EvaluationResult::Error
+                _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for binary evaluation".to_string() })
             }
         }
     }

@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 
 
 #[derive(Clone)]
@@ -20,12 +21,73 @@ pub trait Scanner {
     fn get_position(&self) -> Position;
 }
 
+#[derive(PartialEq, Clone, Copy)]
+pub enum TokenType {
+    LeftParent,
+    RightParent,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    Star,
+    Slash,
+    SemiColon,
+    EqualEqual,
+    Equal,
+    Bang,
+    BangEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Comment,
+    Space,
+    Tab,
+    NewLine,
+    String,
+    Number,
+    Identifier,
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Function,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
+    EOF
+}
+
+#[derive(Clone)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub lexem: String,
+    pub evaluation: String,
+    pub is_filtered: bool,
+    pub position: Position,
+}
+
+pub struct EvaluationError {
+    pub token: Rc<Token>,
+    pub message: String
+}
+
 pub enum EvaluationResult {
     Str(String),
     Number(f64),
     Boolean(bool),
     Nil,
-    Error
+    Error(EvaluationError)
 }
 
 impl fmt::Display for EvaluationResult {
@@ -35,7 +97,7 @@ impl fmt::Display for EvaluationResult {
             EvaluationResult::Str(x) => write!(f, "{}", x),
             EvaluationResult::Number(x) => write!(f, "{}", x),
             EvaluationResult::Nil => write!(f, "nil"),
-            EvaluationResult::Error => write!(f, "error"),
+            EvaluationResult::Error(err) => write!(f, "[line {}]: {}", err.token.position.line_number, err.message),
         }
     }
 }
