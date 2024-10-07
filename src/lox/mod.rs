@@ -551,7 +551,8 @@ impl Expr {
     }
 
     fn evaluate_binary(expr: &BinaryExpr) -> EvaluationResult {
-        if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) = (expr.right.evaluate(), expr.left.evaluate()) {
+        let evaluation = (expr.right.evaluate(), expr.left.evaluate());
+        if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) = evaluation {
             let token_type = expr.operator.token_type;
             match token_type {
                 TokenType::Slash | TokenType::Star | TokenType::Minus | TokenType::Plus => {
@@ -570,7 +571,7 @@ impl Expr {
                 }
                 _ => EvaluationResult::Error
             }
-        } else if let (EvaluationResult::Boolean(right), EvaluationResult::Boolean(left)) = (expr.right.evaluate(), expr.left.evaluate()) {
+        } else if let (EvaluationResult::Boolean(right), EvaluationResult::Boolean(left)) = evaluation {
             let token_type = expr.operator.token_type;
             match token_type {
                 TokenType::EqualEqual | TokenType::BangEqual => {
@@ -582,7 +583,7 @@ impl Expr {
                 }
                 _ => EvaluationResult::Error
             }
-        } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) = (expr.right.evaluate(), expr.left.evaluate()) {
+        } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) = evaluation {
             let token_type = expr.operator.token_type;
             match token_type {
                 TokenType::EqualEqual | TokenType::BangEqual | TokenType::LessEqual | TokenType::Less | TokenType::Greater | TokenType::GreaterEqual => {
@@ -601,7 +602,7 @@ impl Expr {
                 }
                 _ => EvaluationResult::Error
             }
-        } else if let (EvaluationResult::Nil, EvaluationResult::Nil) = (expr.right.evaluate(), expr.left.evaluate()) {
+        } else if let (EvaluationResult::Nil, EvaluationResult::Nil) = evaluation {
             let token_type = expr.operator.token_type;
             match token_type {
                 TokenType::EqualEqual | TokenType::BangEqual | TokenType::LessEqual | TokenType::Less | TokenType::Greater | TokenType::GreaterEqual => {
@@ -614,7 +615,47 @@ impl Expr {
                 _ => EvaluationResult::Error
             }
         } else {
-            EvaluationResult::Error
+            let token_type = expr.operator.token_type;
+            match token_type {
+                TokenType::EqualEqual => EvaluationResult::Boolean(!Self::is_different_type(evaluation)),
+                TokenType::BangEqual => EvaluationResult::Boolean(Self::is_different_type(evaluation)),
+                _ => EvaluationResult::Error
+            }
+        }
+    }
+
+    fn is_different_type(evaluation: (EvaluationResult, EvaluationResult)) -> bool {
+        let (x, y) = evaluation;
+        match x {
+            EvaluationResult::Boolean(_) => {
+                if let EvaluationResult::Boolean(_) = y {
+                    false
+                } else {
+                    true
+                }
+            }
+            EvaluationResult::Str(_) => {
+                if let EvaluationResult::Str(_) = y {
+                    false
+                } else {
+                    true
+                }
+            }
+            EvaluationResult::Nil => {
+                if let EvaluationResult::Nil = y {
+                    false
+                } else {
+                    true
+                }
+            }
+            EvaluationResult::Number(_) => {
+                if let EvaluationResult::Number(_) = y {
+                    false
+                } else {
+                    true
+                }
+            }
+            _ => true
         }
     }
 
