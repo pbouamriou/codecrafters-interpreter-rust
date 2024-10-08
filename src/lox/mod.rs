@@ -731,10 +731,10 @@ impl Statement {
                         if let Some(expr) = &var_statement.expr {
                             let result = expr.evaluate(environment);
                             environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), result);
-                            EvaluationResult::Nil
                         } else {
-                            EvaluationResult::Nil
+                            environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), EvaluationResult::Nil);
                         }
+                        EvaluationResult::Nil
                     }
                     Some(_) => EvaluationResult::Error(EvaluationError{token: var_statement.identifier.clone(), message: "Multiple declaration".to_string()})
                 }
@@ -876,17 +876,17 @@ impl LoxParser {
             }
         }) {
             if let Some(token_identifier) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::Identifier => true,
-                _ => false
-            }
+                match x.token_type {
+                    TokenType::Identifier => true,
+                    _ => false
+                }
             }) {
                 let mut res_expr = None;
                 if let Some(_) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::Equal => true,
-                    _ => false
-                }
+                    match x.token_type {
+                        TokenType::Equal => true,
+                        _ => false
+                    }
                 }) {
                     let expr = self.expression();
                     if let Err(err) = expr {
@@ -898,15 +898,15 @@ impl LoxParser {
                     }
                 }
                 if let Some(_) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::SemiColon => true,
-                    _ => false
-                }
-                }) {
-                    Ok(Statement::Var(VarStatement{identifier: token_identifier, expr: res_expr}))
-                } else {
-                    Err(ParserError{token: self.peek().unwrap(), message: "Missing semicolon.".to_string()})
-                }
+                    match x.token_type {
+                        TokenType::SemiColon => true,
+                        _ => false
+                    }
+                    }) {
+                        Ok(Statement::Var(VarStatement{identifier: token_identifier, expr: res_expr}))
+                    } else {
+                        Err(ParserError{token: self.peek().unwrap(), message: "Missing semicolon.".to_string()})
+                    }
             } else {
                 Err(ParserError{token: self.peek().unwrap(), message: "Missing identifier.".to_string()})
             }
