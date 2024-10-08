@@ -129,7 +129,7 @@ impl Token {
                 if let Some(result) = environment.global_vars.get(self.get_lexem()) {
                     result.clone()
                 } else {
-                    EvaluationResult::Nil
+                    EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Undefined variable".to_string()})
                 }
             }
             _ => EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Can't evaluate token".to_string()}),

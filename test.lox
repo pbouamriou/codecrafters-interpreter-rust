@@ -1,3 +1,1 @@
-var toto = 10;
-var tata = 10;
-print ( toto + tata ) *10;
+print toto;
