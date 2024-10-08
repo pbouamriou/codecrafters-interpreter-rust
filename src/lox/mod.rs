@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{fmt, str};
 use std::io::{self, Write};
 use std::rc::Rc;
 
@@ -113,33 +113,37 @@ impl Token {
         }
     }
 
+    pub fn raw_evaluate<'a>(&'a self) -> &'a str {
+            &self.evaluation
+    }
+
     pub fn evaluate(&self) -> EvaluationResult {
         match self.token_type {
             TokenType::False => EvaluationResult::Boolean(false),
             TokenType::True => EvaluationResult::Boolean(true),
             TokenType::Nil => EvaluationResult::Nil,
-            TokenType::Number => EvaluationResult::Number(self.evaluate_str().parse::<f64>().unwrap()),
-            TokenType::String => EvaluationResult::Str(self.evaluate_str().to_string()),
+            TokenType::Number => EvaluationResult::Number(self.raw_evaluate().parse::<f64>().unwrap()),
+            TokenType::String => EvaluationResult::Str(self.raw_evaluate().to_string()),
             _ => EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Can't evaluate token".to_string()}),
         }
     }
 
     fn scan_string(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
-        let mut content = String::new();
-        content.push(lexem);
+        let mut content = Vec::<u8>::new();
+        content.push(lexem as u8);
         while scanner.match_not_char('"').is_some_and(|x| match x {
             MatchResult::Match(car) => {
-                content.push(car);
+                content.push(car as u8);
                 true
             },
             MatchResult::NotMatch(car) => {
-                content.push(car);
+                content.push(car as u8);
                 false
             }
         }) {
         }
         if scanner.get_char().is_some_and(|x| x == '"') {
-            Ok(Token::new(TokenType::String, content, scanner.get_position()))
+            Ok(Token::new(TokenType::String, String::from_utf8(content).unwrap(), scanner.get_position()))
         } else {
             Err(ScannerError::UnterminatedString)
         }
