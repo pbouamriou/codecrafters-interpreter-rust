@@ -77,11 +77,13 @@ pub struct Token {
     pub position: Position,
 }
 
+#[derive(Clone)]
 pub struct EvaluationError {
     pub token: Rc<Token>,
     pub message: String
 }
 
+#[derive(Clone)]
 pub enum EvaluationResult {
     Str(String),
     Number(f64),
@@ -89,6 +91,7 @@ pub enum EvaluationResult {
     Nil,
     Error(EvaluationError)
 }
+
 
 impl fmt::Display for EvaluationResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

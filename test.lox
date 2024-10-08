@@ -1,2 +1,3 @@
-print "30" + "world";
-print false * (33 + 96);
+var toto = 10;
+var tata = 10;
+print ( toto + tata ) *10;

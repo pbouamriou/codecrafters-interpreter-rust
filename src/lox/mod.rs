@@ -1,4 +1,5 @@
 use core::{fmt, str};
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::rc::Rc;
 
@@ -117,13 +118,20 @@ impl Token {
             &self.evaluation
     }
 
-    pub fn evaluate(&self) -> EvaluationResult {
+    pub fn evaluate(&self, environment: &mut Environment) -> EvaluationResult {
         match self.token_type {
             TokenType::False => EvaluationResult::Boolean(false),
             TokenType::True => EvaluationResult::Boolean(true),
             TokenType::Nil => EvaluationResult::Nil,
             TokenType::Number => EvaluationResult::Number(self.raw_evaluate().parse::<f64>().unwrap()),
             TokenType::String => EvaluationResult::Str(self.raw_evaluate().to_string()),
+            TokenType::Identifier => {
+                if let Some(result) = environment.global_vars.get(self.get_lexem()) {
+                    result.clone()
+                } else {
+                    EvaluationResult::Nil
+                }
+            }
             _ => EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Can't evaluate token".to_string()}),
         }
     }
@@ -438,9 +446,15 @@ struct PrintStatement {
     expr: Expr
 }
 
+struct VarStatement {
+    identifier: Rc<Token>,
+    expr: Option<Expr>,
+}
+
 enum Statement {
     Expr(Expr),
-    Print(PrintStatement)
+    Print(PrintStatement),
+    Var(VarStatement),
 }
 
 enum Expr {
@@ -471,19 +485,19 @@ impl fmt::Display for Expr {
 }
 
 impl Expr {
-    fn evaluate(&self) -> EvaluationResult {
+    fn evaluate(&self, environment: &mut Environment) -> EvaluationResult {
         match self {
-            Expr::Primary(token) => token.evaluate(),
-            Expr::Unary(expr) => Self::evaluate_unary(expr),
-            Expr::Group(expr) => Self::evaluate_group(expr),
-            Expr::Binary(expr) => Self::evaluate_binary(expr),
+            Expr::Primary(token) => token.evaluate(environment),
+            Expr::Unary(expr) => Self::evaluate_unary(expr, environment),
+            Expr::Group(expr) => Self::evaluate_group(expr, environment),
+            Expr::Binary(expr) => Self::evaluate_binary(expr, environment),
         }
     }
 
-    fn evaluate_unary(expr: &UnaryExpr) -> EvaluationResult {
+    fn evaluate_unary(expr: &UnaryExpr, environment: &mut Environment) -> EvaluationResult {
         match expr.operator.token_type {
             TokenType::Bang => {
-                match expr.right.evaluate() {
+                match expr.right.evaluate(environment) {
                     EvaluationResult::Boolean(x) => EvaluationResult::Boolean(!x),
                     EvaluationResult::Nil => EvaluationResult::Boolean(true),
                     EvaluationResult::Number(x) => EvaluationResult::Boolean(x == 0 as f64),
@@ -492,13 +506,13 @@ impl Expr {
                 }
             }
             TokenType::Minus => {
-                match expr.right.evaluate() {
+                match expr.right.evaluate(environment) {
                     EvaluationResult::Number(x) => EvaluationResult::Number(-x),
                     _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number".to_string() })
                 }
             }
             TokenType::Plus => {
-                match expr.right.evaluate() {
+                match expr.right.evaluate(environment) {
                     EvaluationResult::Number(x) => EvaluationResult::Number(x),
                     _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number".to_string() })
                 }
@@ -507,8 +521,8 @@ impl Expr {
         }
     }
 
-    fn evaluate_binary(expr: &BinaryExpr) -> EvaluationResult {
-        let evaluation = (expr.right.evaluate(), expr.left.evaluate());
+    fn evaluate_binary(expr: &BinaryExpr, environment: &mut Environment) -> EvaluationResult {
+        let evaluation = (expr.right.evaluate(environment), expr.left.evaluate(environment));
         let token_type = expr.operator.token_type;
         match token_type {
             TokenType::Minus | TokenType::Slash | TokenType::Star => {
@@ -692,17 +706,18 @@ impl Expr {
         }
     }
 
-    fn evaluate_group(expr: &GroupExpr) -> EvaluationResult {
-        expr.expr.evaluate()
+    fn evaluate_group(expr: &GroupExpr, environment: &mut Environment) -> EvaluationResult {
+        expr.expr.evaluate(environment)
     }
 }
 
+
 impl Statement {
-    fn evaluate(&self) -> EvaluationResult {
+    fn evaluate(&self, mut environment: &mut Environment) -> EvaluationResult {
         match self {
-            Self::Expr(expr) => expr.evaluate(),
+            Self::Expr(expr) => expr.evaluate(& mut environment),
             Self::Print(statement) => {
-                let result = statement.expr.evaluate();
+                let result = statement.expr.evaluate(& mut environment);
                 if let EvaluationResult::Error(_) = result {
                     result
                 } else {
@@ -710,8 +725,26 @@ impl Statement {
                     result
                 }
             }
+            Self::Var(var_statement) => {
+                match environment.global_vars.get(var_statement.identifier.get_lexem()) {
+                    None => {
+                        if let Some(expr) = &var_statement.expr {
+                            let result = expr.evaluate(environment);
+                            environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), result);
+                            EvaluationResult::Nil
+                        } else {
+                            EvaluationResult::Nil
+                        }
+                    }
+                    Some(_) => EvaluationResult::Error(EvaluationError{token: var_statement.identifier.clone(), message: "Multiple declaration".to_string()})
+                }
+            }
         }
     }
+}
+
+pub struct Environment {
+    global_vars: HashMap<String, EvaluationResult>,
 }
 
 struct LoxAstExpression {
@@ -728,7 +761,8 @@ impl Ast for LoxAstExpression {
     }
 
     fn evaluate(&self) -> traits::EvaluationResult {
-        self.root.evaluate()
+        let mut environment = Environment{ global_vars: HashMap::new() };
+        self.root.evaluate(& mut environment)
     }
 }
 
@@ -740,6 +774,13 @@ impl fmt::Display for Statement {
             }
             Self::Print(expr) => {
                 write!(f, "(print {})", expr.expr)
+            }
+            Self::Var(var_statement) => {
+                if let Some(expr) = &var_statement.expr {
+                    write!(f, "(var {} {})", var_statement.identifier.evaluate_str(), expr)
+                } else {
+                    write!(f, "(var {})", var_statement.identifier.evaluate_str())
+                }
             }
         }
     }
@@ -755,8 +796,9 @@ impl Ast for LoxAstProgram {
 
     fn evaluate(&self) -> traits::EvaluationResult {
         let mut eval = EvaluationResult::Nil;
+        let mut environment = Environment{ global_vars: HashMap::new() };
         for statement in self.statements.iter() {
-            eval = statement.evaluate();
+            eval = statement.evaluate(& mut environment);
             if let EvaluationResult::Error(_) = eval {
                 return eval;
             }
@@ -805,7 +847,7 @@ impl LoxParser {
                 _ => false
             }
         }).is_none() {
-            match self.statement() {
+            match self.declaration() {
                 Ok(statement) => {
                     statements.push(statement);
                 }
@@ -816,6 +858,63 @@ impl LoxParser {
         }
         Ok(statements)
     }
+
+    fn declaration(&mut self) -> Result<Statement, ParserError> {
+        match self.var_decl() {
+            Ok(expr) => Ok(expr),
+            Err(_) => {
+                self.statement()
+            }
+        }
+    }
+
+    fn var_decl(&mut self) -> Result<Statement, ParserError> {
+        if let Some(_) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::Var => true,
+                _ => false
+            }
+        }) {
+            if let Some(token_identifier) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::Identifier => true,
+                _ => false
+            }
+            }) {
+                let mut res_expr = None;
+                if let Some(_) = self.match_cond(|x| {
+                match x.token_type {
+                    TokenType::Equal => true,
+                    _ => false
+                }
+                }) {
+                    let expr = self.expression();
+                    if let Err(err) = expr {
+                        return Err(err);
+                    } else {
+                        if let Ok(expr) = expr {
+                            res_expr = Some(expr)
+                        }
+                    }
+                }
+                if let Some(_) = self.match_cond(|x| {
+                match x.token_type {
+                    TokenType::SemiColon => true,
+                    _ => false
+                }
+                }) {
+                    Ok(Statement::Var(VarStatement{identifier: token_identifier, expr: res_expr}))
+                } else {
+                    Err(ParserError{token: self.peek().unwrap(), message: "Missing semicolon.".to_string()})
+                }
+            } else {
+                Err(ParserError{token: self.peek().unwrap(), message: "Missing identifier.".to_string()})
+            }
+        } else {
+            Err(ParserError{token: self.peek().unwrap(), message: "Missing var keyword.".to_string()})
+        }
+    }
+
 
     fn statement(&mut self) -> Result<Statement, ParserError> {
         match self.print_statement() {
@@ -979,7 +1078,7 @@ impl LoxParser {
     fn primary(&mut self) -> Result<Expr, ParserError> {
         if let Some(token) = self.match_cond(|x| {
             match x.token_type {
-                TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number | TokenType::String => true,
+                TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number | TokenType::String | TokenType::Identifier => true,
                 _ => false
             }
         }) {
@@ -1016,7 +1115,6 @@ impl LoxParser {
             Err(ParserError{token: self.peek().unwrap(), message: "Expect expression.".to_string()})
         }
     }
-
 
     fn match_cond(&mut self, cond: impl Fn(Rc<Token>) -> bool) -> Option<Rc<Token>> {
         if let Some(token) = self.peek() {
