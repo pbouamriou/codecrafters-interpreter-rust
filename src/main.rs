@@ -81,7 +81,7 @@ fn main() -> AppExitCode {
             match scanner.tokenize() {
                 Ok(tokens) => {
                     let mut parser = LoxParser::new(tokens);
-                    match parser.parse() {
+                    match parser.parse_expression() {
                         Err(err) => {
                             writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
                             return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
@@ -105,7 +105,7 @@ fn main() -> AppExitCode {
             match scanner.tokenize() {
                 Ok(tokens) => {
                     let mut parser = LoxParser::new(tokens);
-                    match parser.parse() {
+                    match parser.parse_expression() {
                         Err(err) => {
                             writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
                             return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
@@ -118,6 +118,38 @@ fn main() -> AppExitCode {
                                     return AppExitCode::Err(ApplicationErrorCode::EvaluationError)
                                 }
                                 _ => { println!("{}", result); }
+                            }
+                        }
+                    }
+                    return AppExitCode::Ok
+                }
+                Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+            }
+        }
+        "run" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                String::new()
+            });
+
+            let mut scanner = LoxScanner::new(&file_contents);
+
+            match scanner.tokenize() {
+                Ok(tokens) => {
+                    let mut parser = LoxParser::new(tokens);
+                    match parser.parse_program() {
+                        Err(err) => {
+                            writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
+                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                        }
+                        Ok(ast) => {
+                            let result = ast.evaluate();
+                            match result {
+                                EvaluationResult::Error(_) => {
+                                    writeln!(io::stderr(), "{}", result).unwrap();
+                                    return AppExitCode::Err(ApplicationErrorCode::EvaluationError)
+                                }
+                                _ => { writeln!(io::stderr(),"{}", result).unwrap(); }
                             }
                         }
                     }

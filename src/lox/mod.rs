@@ -430,6 +430,15 @@ struct GroupExpr {
     expr: Box<Expr>,
 }
 
+struct PrintStatement {
+    expr: Expr
+}
+
+enum Statement {
+    Expr(Expr),
+    Print(PrintStatement)
+}
+
 enum Expr {
     Primary(Rc<Token>),
     Binary(BinaryExpr),
@@ -684,17 +693,64 @@ impl Expr {
     }
 }
 
-struct LoxAst {
+impl Statement {
+    fn evaluate(&self) -> EvaluationResult {
+        match self {
+            Self::Expr(expr) => expr.evaluate(),
+            Self::Print(statement) => {
+                let result = statement.expr.evaluate();
+                println!("{}", result);
+                result
+            }
+        }
+    }
+}
+
+struct LoxAstExpression {
     root: Expr
 }
 
-impl Ast for LoxAst {
+struct LoxAstProgram {
+    statements: Vec<Statement>,
+}
+
+impl Ast for LoxAstExpression {
     fn print(&self) {
         println!("{}", self.root)
     }
 
     fn evaluate(&self) -> traits::EvaluationResult {
         self.root.evaluate()
+    }
+}
+
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Expr(expr) => {
+                write!(f, "{}", expr)
+            }
+            Self::Print(expr) => {
+                write!(f, "(print {})", expr.expr)
+            }
+        }
+    }
+}
+
+impl Ast for LoxAstProgram {
+    fn print(&self) {
+
+        for statement in self.statements.iter() {
+            println!("{}", statement)
+        }
+    }
+
+    fn evaluate(&self) -> traits::EvaluationResult {
+        let mut eval = EvaluationResult::Nil;
+        for statement in self.statements.iter() {
+            eval = statement.evaluate();
+        }
+        eval
     }
 }
 
@@ -716,11 +772,96 @@ impl LoxParser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<impl Ast, ParserError> {
-        match self.equality() {
-            Ok(ast) => Ok(LoxAst{root: ast}),
+    pub fn parse_expression(&mut self) -> Result<impl Ast, ParserError> {
+        match self.expression() {
+            Ok(ast) => Ok(LoxAstExpression{root: ast}),
             Err(x) => Err(x)
         }
+    }
+
+    pub fn parse_program(&mut self) -> Result<impl Ast, ParserError> {
+        match self.program() {
+            Ok(statements) => Ok(LoxAstProgram{statements}),
+            Err(x) => Err(x)
+        }
+    }
+
+    fn program(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut statements = Vec::<Statement>::new();
+        while self.match_cond(|x| {
+            match x.token_type {
+                TokenType::EOF => true,
+                _ => false
+            }
+        }).is_none() {
+            match self.statement() {
+                Ok(statement) => {
+                    statements.push(statement);
+                }
+                Err(err) => {
+                    return Err(err)
+                }
+            }
+        }
+        Ok(statements)
+    }
+
+    fn statement(&mut self) -> Result<Statement, ParserError> {
+        match self.print_statement() {
+            Ok(expr) => Ok(expr),
+            Err(_) => {
+                self.expression_statement()
+            }
+        }
+    }
+
+    fn expression_statement(&mut self) -> Result<Statement, ParserError> {
+        match self.expression() {
+            Ok(expr) => {
+                if let Some(_) = self.match_cond(|x| {
+                    match x.token_type {
+                        TokenType::SemiColon => true,
+                        _ => false
+                    }
+                }) {
+                    Ok(Statement::Expr(expr))
+                } else {
+                    Err(ParserError{token: self.peek().unwrap(), message: "Missing semicolon.".to_string()})
+                }
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Statement, ParserError> {
+        if let Some(token_print) = self.match_cond(|x| {
+            match x.token_type {
+                TokenType::Print => true,
+                _ => false
+            }
+        }) {
+            match self.expression() {
+                Ok(expr) => {
+                    if let Some(_) = self.match_cond(|x| {
+                        match x.token_type {
+                            TokenType::SemiColon => true,
+                            _ => false
+                        }
+                    }) {
+                        Ok(Statement::Print(PrintStatement{expr}))
+                    } else {
+                        Err(ParserError{token: token_print, message: "Missing semicolon.".to_string()})
+                    }
+                }
+                Err(err) => Err(err)
+            }
+        } else {
+            Err(ParserError{token: self.peek().unwrap(), message: "Missing print token.".to_string()})
+        }
+    }
+
+    fn expression(&mut self) -> Result<Expr, ParserError> {
+        self.equality()
     }
 
     fn equality(&mut self) -> Result<Expr, ParserError> {

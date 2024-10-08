@@ -1,1 +1,3 @@
-"toto" + 10
+print (12/14);
+print "toto";
+print true;
