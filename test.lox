@@ -1,12 +1,2 @@
-print true != false;
-
-print "68
-49
-60
-";
-
-print "There should be an empty line above this.";
-
-print "(" + "" + ")";
-
-print "non-ascii: ॐ";
+print "30" + "world";
+print false * (33 + 96);

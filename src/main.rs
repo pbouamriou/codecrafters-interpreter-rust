@@ -145,8 +145,8 @@ fn main() -> AppExitCode {
                         Ok(ast) => {
                             let result = ast.evaluate();
                             match result {
-                                EvaluationResult::Error(_) => {
-                                    writeln!(io::stderr(), "{}", result).unwrap();
+                                EvaluationResult::Error(err) => {
+                                    writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
                                     return AppExitCode::Err(ApplicationErrorCode::EvaluationError)
                                 }
                                 _ => { writeln!(io::stderr(),"{}", result).unwrap(); }

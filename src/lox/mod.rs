@@ -703,8 +703,12 @@ impl Statement {
             Self::Expr(expr) => expr.evaluate(),
             Self::Print(statement) => {
                 let result = statement.expr.evaluate();
-                println!("{}", result);
-                result
+                if let EvaluationResult::Error(_) = result {
+                    result
+                } else {
+                    println!("{}", result);
+                    result
+                }
             }
         }
     }
@@ -753,6 +757,9 @@ impl Ast for LoxAstProgram {
         let mut eval = EvaluationResult::Nil;
         for statement in self.statements.iter() {
             eval = statement.evaluate();
+            if let EvaluationResult::Error(_) = eval {
+                return eval;
+            }
         }
         eval
     }
