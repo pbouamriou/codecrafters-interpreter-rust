@@ -726,17 +726,34 @@ impl Statement {
                 }
             }
             Self::Var(var_statement) => {
-                match environment.global_vars.get(var_statement.identifier.get_lexem()) {
+                match environment.global_vars.get_mut(var_statement.identifier.get_lexem()) {
                     None => {
                         if let Some(expr) = &var_statement.expr {
                             let result = expr.evaluate(environment);
-                            environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), result);
+                            if let EvaluationResult::Error(_) = result {
+                                return result;
+                            } else {
+                                environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), result);
+                            }
                         } else {
                             environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), EvaluationResult::Nil);
                         }
                         EvaluationResult::Nil
                     }
-                    Some(_) => EvaluationResult::Error(EvaluationError{token: var_statement.identifier.clone(), message: "Multiple declaration".to_string()})
+                    Some(item) => {
+                        if let Some(expr) = &var_statement.expr {
+                            let result = expr.evaluate(environment);
+                            if let EvaluationResult::Error(_) = result {
+                                return result;
+                            } else {
+                                let item = environment.global_vars.get_mut(var_statement.identifier.get_lexem()).unwrap();
+                                *item = result;
+                            }
+                        } else {
+                            *item = EvaluationResult::Nil;
+                        }
+                        EvaluationResult::Nil
+                    }
                 }
             }
         }
