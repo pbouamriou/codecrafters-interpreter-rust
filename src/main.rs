@@ -2,14 +2,13 @@ mod lox;
 
 use lox::traits::EvaluationResult;
 
-use crate::lox::{LoxParser, LoxScanner};
 use crate::lox::traits::Ast;
+use crate::lox::{LoxParser, LoxScanner};
 
 use std::env;
 use std::fs;
-use std::process::Termination;
 use std::process::ExitCode;
-use std::io::{self, Write};
+use std::process::Termination;
 
 enum ApplicationErrorCode {
     UnexpectedCaracter = 65,
@@ -22,7 +21,6 @@ enum AppExitCode {
     Err(ApplicationErrorCode),
 }
 
-
 impl Termination for AppExitCode {
     fn report(self) -> ExitCode {
         match self {
@@ -32,12 +30,11 @@ impl Termination for AppExitCode {
     }
 }
 
-
 fn main() -> AppExitCode {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        writeln!(io::stderr(), "Usage: {} tokenize <filename>", args[0]).unwrap();
-        return AppExitCode::Err(ApplicationErrorCode::WrongNumberOfParameters)
+        eprintln!("Usage: {} tokenize <filename>", args[0]);
+        return AppExitCode::Err(ApplicationErrorCode::WrongNumberOfParameters);
     }
 
     let command = &args[1];
@@ -46,10 +43,10 @@ fn main() -> AppExitCode {
     match command.as_str() {
         "tokenize" => {
             // You can use print statements as follows for debugging, they'll be visible when running tests.
-            writeln!(io::stderr(), "Logs from your program will appear here!").unwrap();
+            eprintln!("Logs from your program will appear here!");
 
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -60,19 +57,19 @@ fn main() -> AppExitCode {
                     for token in tokens.iter() {
                         println!("{}", token)
                     }
-                    return AppExitCode::Ok;
-                },
+                    AppExitCode::Ok
+                }
                 Err(tokens) => {
                     for token in tokens.iter() {
                         println!("{}", token)
                     }
-                    return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
+                    AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
                 }
             }
         }
         "parse" => {
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -83,20 +80,25 @@ fn main() -> AppExitCode {
                     let mut parser = LoxParser::new(tokens);
                     match parser.parse_expression() {
                         Err(err) => {
-                            writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
-                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                            eprintln!(
+                                "[line {}] Error at '{}': {}",
+                                err.token.get_position().line_number,
+                                err.token.get_lexem(),
+                                err.message
+                            );
+                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                         }
                         Ok(ast) => ast.print(),
                     }
-                    return AppExitCode::Ok
+                    AppExitCode::Ok
                 }
-                Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                Err(_) => AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter),
             }
         }
 
         "evaluate" => {
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -107,28 +109,35 @@ fn main() -> AppExitCode {
                     let mut parser = LoxParser::new(tokens);
                     match parser.parse_expression() {
                         Err(err) => {
-                            writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
-                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                            eprintln!(
+                                "[line {}] Error at '{}': {}",
+                                err.token.get_position().line_number,
+                                err.token.get_lexem(),
+                                err.message
+                            );
+                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                         }
                         Ok(ast) => {
                             let result = ast.evaluate();
                             match result {
                                 EvaluationResult::Error(_) => {
-                                    writeln!(io::stderr(), "{}", result).unwrap();
-                                    return AppExitCode::Err(ApplicationErrorCode::EvaluationError)
+                                    eprintln!("{}", result);
+                                    return AppExitCode::Err(ApplicationErrorCode::EvaluationError);
                                 }
-                                _ => { println!("{}", result); }
+                                _ => {
+                                    println!("{}", result);
+                                }
                             }
                         }
                     }
-                    return AppExitCode::Ok
+                    AppExitCode::Ok
                 }
-                Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                Err(_) => AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter),
             }
         }
         "run" => {
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -139,28 +148,40 @@ fn main() -> AppExitCode {
                     let mut parser = LoxParser::new(tokens);
                     match parser.parse_program() {
                         Err(err) => {
-                            writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
-                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                            eprintln!(
+                                "[line {}] Error at '{}': {}",
+                                err.token.get_position().line_number,
+                                err.token.get_lexem(),
+                                err.message
+                            );
+                            return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                         }
                         Ok(ast) => {
                             let result = ast.evaluate();
                             match result {
                                 EvaluationResult::Error(err) => {
-                                    writeln!(io::stderr(), "[line {}] Error at '{}': {}", err.token.get_position().line_number, err.token.get_lexem(), err.message).unwrap();
-                                    return AppExitCode::Err(ApplicationErrorCode::EvaluationError)
+                                    eprintln!(
+                                        "[line {}] Error at '{}': {}",
+                                        err.token.get_position().line_number,
+                                        err.token.get_lexem(),
+                                        err.message
+                                    );
+                                    return AppExitCode::Err(ApplicationErrorCode::EvaluationError);
                                 }
-                                _ => { writeln!(io::stderr(),"{}", result).unwrap(); }
+                                _ => {
+                                    eprintln!("{}", result);
+                                }
                             }
                         }
                     }
-                    return AppExitCode::Ok
+                    AppExitCode::Ok
                 }
-                Err(_) => return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter)
+                Err(_) => AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter),
             }
         }
         _ => {
-            writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
-            return AppExitCode::Err(ApplicationErrorCode::UnknownCommand);
+            eprintln!("Unknown command: {}", command);
+            AppExitCode::Err(ApplicationErrorCode::UnknownCommand)
         }
     }
 }

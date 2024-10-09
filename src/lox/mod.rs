@@ -1,13 +1,12 @@
 use core::{fmt, str};
 use std::collections::HashMap;
-use std::io::{self, Write};
 use std::rc::Rc;
 
 pub mod traits;
 
-use traits::{Ast, EvaluationError, EvaluationResult, MatchResult, Position, Scanner, Token, TokenType};
-
-
+use traits::{
+    Ast, EvaluationError, EvaluationResult, MatchResult, Position, Scanner, Token, TokenType,
+};
 
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -54,11 +53,10 @@ impl fmt::Display for TokenType {
             TokenType::True => write!(f, "TRUE"),
             TokenType::Var => write!(f, "VAR"),
             TokenType::While => write!(f, "WHILE"),
-            TokenType::EOF => write!(f, "EOF"),
+            TokenType::Eof => write!(f, "EOF"),
         }
     }
 }
-
 
 pub enum ScannerError {
     UnexpectedCaracter,
@@ -66,22 +64,24 @@ pub enum ScannerError {
 }
 
 impl Token {
-
-    fn new(token_type: TokenType, lexem: String, position: Position ) -> Self {
-        let is_filtered =  token_type == TokenType::Comment || token_type == TokenType::Space || token_type == TokenType::Tab || token_type == TokenType::NewLine;
+    fn new(token_type: TokenType, lexem: String, position: Position) -> Self {
+        let is_filtered = token_type == TokenType::Comment
+            || token_type == TokenType::Space
+            || token_type == TokenType::Tab
+            || token_type == TokenType::NewLine;
         let mut evaluation = "".to_string();
         match token_type {
             TokenType::String => {
-                let x : Vec<&str> = lexem.split('"').collect();
+                let x: Vec<&str> = lexem.split('"').collect();
                 evaluation = x.get(1).unwrap().to_string();
             }
             TokenType::Number => {
                 if let Ok(value) = lexem.parse::<u64>() {
                     evaluation = format!("{:.1}", value as f64);
                 } else {
-                    let value : f64 = lexem.parse().unwrap();
+                    let value: f64 = lexem.parse().unwrap();
                     if value == ((value as u64) as f64) {
-                        evaluation = format!("{:.1}", value as f64);
+                        evaluation = format!("{:.1}", value);
                     } else {
                         evaluation = format!("{}", value);
                     }
@@ -94,28 +94,28 @@ impl Token {
             lexem,
             evaluation,
             is_filtered,
-            position
+            position,
         }
     }
 
-    pub fn parse<'a>(&'a self) -> &'a String {
-        if self.evaluation.len() > 0 {
+    pub fn parse(&self) -> &String {
+        if !self.evaluation.is_empty() {
             &self.evaluation
         } else {
             &self.lexem
         }
     }
-    
-    pub fn evaluate_str<'a>(&'a self) -> &'a str {
-        if self.evaluation.len() > 0 {
+
+    pub fn evaluate_str(&self) -> &str {
+        (if !self.evaluation.is_empty() {
             &self.evaluation
         } else {
-            &"null"
-        }
+            "null"
+        }) as _
     }
 
-    pub fn raw_evaluate<'a>(&'a self) -> &'a str {
-            &self.evaluation
+    pub fn raw_evaluate(&self) -> &str {
+        &self.evaluation
     }
 
     pub fn evaluate(&self, environment: &mut Environment) -> EvaluationResult {
@@ -123,58 +123,64 @@ impl Token {
             TokenType::False => EvaluationResult::Boolean(false),
             TokenType::True => EvaluationResult::Boolean(true),
             TokenType::Nil => EvaluationResult::Nil,
-            TokenType::Number => EvaluationResult::Number(self.raw_evaluate().parse::<f64>().unwrap()),
+            TokenType::Number => {
+                EvaluationResult::Number(self.raw_evaluate().parse::<f64>().unwrap())
+            }
             TokenType::String => EvaluationResult::Str(self.raw_evaluate().to_string()),
             TokenType::Identifier => {
                 if let Some(result) = environment.global_vars.get(self.get_lexem()) {
                     result.clone()
                 } else {
-                    EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Undefined variable".to_string()})
+                    EvaluationResult::Error(EvaluationError {
+                        token: Rc::new(self.clone()),
+                        message: "Undefined variable".to_string(),
+                    })
                 }
             }
-            _ => EvaluationResult::Error(EvaluationError{token: Rc::new(self.clone()), message: "Can't evaluate token".to_string()}),
+            _ => EvaluationResult::Error(EvaluationError {
+                token: Rc::new(self.clone()),
+                message: "Can't evaluate token".to_string(),
+            }),
         }
     }
 
-    fn scan_string(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
+    fn scan_string(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError> {
         let mut content = Vec::<u8>::new();
         content.push(lexem as u8);
         while scanner.match_not_char('"').is_some_and(|x| match x {
             MatchResult::Match(car) => {
                 content.push(car as u8);
                 true
-            },
+            }
             MatchResult::NotMatch(car) => {
                 content.push(car as u8);
                 false
             }
-        }) {
-        }
+        }) {}
         if scanner.get_char().is_some_and(|x| x == '"') {
-            Ok(Token::new(TokenType::String, String::from_utf8(content).unwrap(), scanner.get_position()))
+            Ok(Token::new(
+                TokenType::String,
+                String::from_utf8(content).unwrap(),
+                scanner.get_position(),
+            ))
         } else {
             Err(ScannerError::UnterminatedString)
         }
     }
-    
-    fn scan_identifier(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
+
+    fn scan_identifier(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError> {
         let mut content = String::new();
         content.push(lexem);
-        while scanner.match_with_fn(|car| {
-            match car {
-               'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => true,
-               _ => false
-            }
-        }).is_some_and(|x| match x {
-            MatchResult::Match(car) => {
-                content.push(car);
-                true
-            },
-            MatchResult::NotMatch(_) => {
-                false
-            }
-        }) {
-        }
+        while scanner
+            .match_with_fn(|car| matches!(car, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
+            .is_some_and(|x| match x {
+                MatchResult::Match(car) => {
+                    content.push(car);
+                    true
+                }
+                MatchResult::NotMatch(_) => false,
+            })
+        {}
         let position = scanner.get_position();
         match content.as_str() {
             "and" => Ok(Token::new(TokenType::And, content, position)),
@@ -193,47 +199,66 @@ impl Token {
             "true" => Ok(Token::new(TokenType::True, content, position)),
             "var" => Ok(Token::new(TokenType::Var, content, position)),
             "while" => Ok(Token::new(TokenType::While, content, position)),
-            _ => Ok(Token::new(TokenType::Identifier, content, position))
+            _ => Ok(Token::new(TokenType::Identifier, content, position)),
         }
     }
 
-    fn scan_number(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
+    fn scan_number(lexem: char, scanner: &mut impl Scanner) -> Result<Self, ScannerError> {
         let mut content = String::new();
         let mut has_dot = false;
         content.push(lexem);
-        while scanner.match_with_fn(|car| {
-            match car {
-               '0'..='9' => true,
-               '.' => { if !has_dot { 
-                    has_dot = true; 
-                    true
-                } else { 
-                    false
+        while scanner
+            .match_with_fn(|car| match car {
+                '0'..='9' => true,
+                '.' => {
+                    if !has_dot {
+                        has_dot = true;
+                        true
+                    } else {
+                        false
+                    }
                 }
-            },
-               _ => false
-            }
-        }).is_some_and(|x| match x {
-            MatchResult::Match(car) => {
-                content.push(car);
-                true
-            },
-            MatchResult::NotMatch(_) => {
-                false
-            }
-        }) {
-        }
-        Ok(Token::new(TokenType::Number, content, scanner.get_position()))
+                _ => false,
+            })
+            .is_some_and(|x| match x {
+                MatchResult::Match(car) => {
+                    content.push(car);
+                    true
+                }
+                MatchResult::NotMatch(_) => false,
+            })
+        {}
+        Ok(Token::new(
+            TokenType::Number,
+            content,
+            scanner.get_position(),
+        ))
     }
 
-    pub fn new_from_scanner(scanner: &mut impl Scanner) -> Result<Self, ScannerError>  {
-        if let Some(lexem) =  scanner.get_char() {
+    pub fn new_from_scanner(scanner: &mut impl Scanner) -> Result<Self, ScannerError> {
+        if let Some(lexem) = scanner.get_char() {
             let position = scanner.get_position();
             match lexem {
-                ')' => Ok(Token::new(TokenType::RightParent, lexem.to_string(), position)),
-                '(' => Ok(Token::new(TokenType::LeftParent,lexem.to_string(), position)),
-                '}' => Ok(Token::new(TokenType::RightBrace, lexem.to_string(), position)),
-                '{' => Ok(Token::new(TokenType::LeftBrace, lexem.to_string(), position)),
+                ')' => Ok(Token::new(
+                    TokenType::RightParent,
+                    lexem.to_string(),
+                    position,
+                )),
+                '(' => Ok(Token::new(
+                    TokenType::LeftParent,
+                    lexem.to_string(),
+                    position,
+                )),
+                '}' => Ok(Token::new(
+                    TokenType::RightBrace,
+                    lexem.to_string(),
+                    position,
+                )),
+                '{' => Ok(Token::new(
+                    TokenType::LeftBrace,
+                    lexem.to_string(),
+                    position,
+                )),
                 ',' => Ok(Token::new(TokenType::Comma, lexem.to_string(), position)),
                 '.' => Ok(Token::new(TokenType::Dot, lexem.to_string(), position)),
                 '-' => Ok(Token::new(TokenType::Minus, lexem.to_string(), position)),
@@ -247,17 +272,24 @@ impl Token {
                         while scanner.match_not_char('\n').is_some_and(|x| match x {
                             MatchResult::Match(_) => true,
                             MatchResult::NotMatch(_) => false,
-                        }) {
-                        }
+                        }) {}
                         Ok(Token::new(TokenType::Comment, "".to_string(), position))
                     } else {
                         Ok(Token::new(TokenType::Slash, lexem.to_string(), position))
                     }
-                },
-                ';' => Ok(Token::new(TokenType::SemiColon, lexem.to_string(), position)),
+                }
+                ';' => Ok(Token::new(
+                    TokenType::SemiColon,
+                    lexem.to_string(),
+                    position,
+                )),
                 '=' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Ok(Token::new(TokenType::EqualEqual, "==".to_string(), position))
+                        Ok(Token::new(
+                            TokenType::EqualEqual,
+                            "==".to_string(),
+                            position,
+                        ))
                     } else {
                         Ok(Token::new(TokenType::Equal, lexem.to_string(), position))
                     }
@@ -278,7 +310,11 @@ impl Token {
                 }
                 '>' => {
                     if scanner.match_char('=').is_some_and(|x| x) {
-                        Ok(Token::new(TokenType::GreaterEqual, ">=".to_string(), position))
+                        Ok(Token::new(
+                            TokenType::GreaterEqual,
+                            ">=".to_string(),
+                            position,
+                        ))
                     } else {
                         Ok(Token::new(TokenType::Greater, lexem.to_string(), position))
                     }
@@ -286,10 +322,14 @@ impl Token {
                 '\t' => Ok(Token::new(TokenType::Tab, lexem.to_string(), position)),
                 ' ' => Ok(Token::new(TokenType::Space, lexem.to_string(), position)),
                 '\n' | '\r' => Ok(Token::new(TokenType::NewLine, lexem.to_string(), position)),
-                _ => Err(ScannerError::UnexpectedCaracter)
+                _ => Err(ScannerError::UnexpectedCaracter),
             }
         } else {
-            Ok(Token::new(TokenType::EOF, "".to_string(), scanner.get_position()))
+            Ok(Token::new(
+                TokenType::Eof,
+                "".to_string(),
+                scanner.get_position(),
+            ))
         }
     }
 
@@ -304,22 +344,35 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.token_type, self.lexem, self.evaluate_str())
+        write!(
+            f,
+            "{} {} {}",
+            self.token_type,
+            self.lexem,
+            self.evaluate_str()
+        )
     }
 }
 
 pub struct LoxScanner<'a> {
     current: usize,
     position: Position,
-    source: &'a str
+    source: &'a str,
 }
 
 impl<'a> LoxScanner<'a> {
     pub fn new(contents: &'a str) -> Self {
-        Self { current: 0, source: contents, position: Position{line_number: 1, position: 1} }
+        Self {
+            current: 0,
+            source: contents,
+            position: Position {
+                line_number: 1,
+                position: 1,
+            },
+        }
     }
 
-    pub fn tokenize(& mut self) -> Result<Vec<Rc<Token>>, Vec<Rc<Token>>> {
+    pub fn tokenize(&mut self) -> Result<Vec<Rc<Token>>, Vec<Rc<Token>>> {
         let mut tokens: Vec<Rc<Token>> = Vec::new();
         let mut error = false;
         loop {
@@ -329,24 +382,33 @@ impl<'a> LoxScanner<'a> {
                         if !x.is_filtered {
                             tokens.push(Rc::new(x));
                         }
-                    },
-                    Err(err) => {
-                        match err {
-                            ScannerError::UnexpectedCaracter => {
-                                if character != '\n' && character != '\r' {
-                                    writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", self.get_position().line_number, character).unwrap();
-                                    error = true
-                                }
-                            },
-                            ScannerError::UnterminatedString => {
-                                    writeln!(io::stderr(), "[line {}] Error: Unterminated string.", self.get_position().line_number).unwrap();
-                                    error = true
+                    }
+                    Err(err) => match err {
+                        ScannerError::UnexpectedCaracter => {
+                            if character != '\n' && character != '\r' {
+                                eprintln!(
+                                    "[line {}] Error: Unexpected character: {}",
+                                    self.get_position().line_number,
+                                    character
+                                );
+                                error = true
                             }
                         }
-                    }
+                        ScannerError::UnterminatedString => {
+                            eprintln!(
+                                "[line {}] Error: Unterminated string.",
+                                self.get_position().line_number
+                            );
+                            error = true
+                        }
+                    },
                 }
             } else {
-                tokens.push(Rc::new(Token::new(TokenType::EOF, "".to_string(), self.get_position() )));
+                tokens.push(Rc::new(Token::new(
+                    TokenType::Eof,
+                    "".to_string(),
+                    self.get_position(),
+                )));
                 break;
             }
         }
@@ -362,15 +424,12 @@ impl<'a> LoxScanner<'a> {
             return None;
         }
         let item = self.source.as_bytes().get(self.current);
-        match item {
-            Some(x) => Some((*x) as char),
-            None => None
-        }
+        item.map(|x| (*x) as char)
     }
 }
 
 impl<'a> Scanner for LoxScanner<'a> {
-    fn get_char(& mut self) -> Option<char> {
+    fn get_char(&mut self) -> Option<char> {
         let x = self.peek();
         if let Some(character) = x {
             self.current += 1;
@@ -383,11 +442,11 @@ impl<'a> Scanner for LoxScanner<'a> {
         x
     }
 
-    fn get_position(& self) -> Position {
+    fn get_position(&self) -> Position {
         self.position.clone()
     }
 
-    fn match_char(& mut self, character: char) -> Option<bool> {
+    fn match_char(&mut self, character: char) -> Option<bool> {
         if let Some(x) = self.peek() {
             if x == character {
                 self.current += 1;
@@ -399,7 +458,7 @@ impl<'a> Scanner for LoxScanner<'a> {
         None
     }
 
-    fn match_not_char(& mut self, character: char) -> Option<MatchResult> {
+    fn match_not_char(&mut self, character: char) -> Option<MatchResult> {
         if let Some(x) = self.peek() {
             if x != character {
                 self.current += 1;
@@ -411,8 +470,7 @@ impl<'a> Scanner for LoxScanner<'a> {
         None
     }
 
-
-    fn match_with_fn(& mut self, mut match_fn: impl FnMut(char) -> bool) -> Option<MatchResult> {
+    fn match_with_fn(&mut self, mut match_fn: impl FnMut(char) -> bool) -> Option<MatchResult> {
         if let Some(x) = self.peek() {
             if match_fn(x) {
                 self.current += 1;
@@ -422,10 +480,8 @@ impl<'a> Scanner for LoxScanner<'a> {
             }
         }
         None
-
     }
 }
-
 
 struct BinaryExpr {
     left: Rc<Expr>,
@@ -443,7 +499,7 @@ struct GroupExpr {
 }
 
 struct PrintStatement {
-    expr: Expr
+    expr: Expr,
 }
 
 struct VarStatement {
@@ -478,7 +534,13 @@ impl fmt::Display for Expr {
             }
 
             Expr::Binary(expr) => {
-                write!(f, "({} {} {})", expr.operator.parse(), expr.left, expr.right)
+                write!(
+                    f,
+                    "({} {} {})",
+                    expr.operator.parse(),
+                    expr.left,
+                    expr.right
+                )
             }
         }
     }
@@ -496,93 +558,133 @@ impl Expr {
 
     fn evaluate_unary(expr: &UnaryExpr, environment: &mut Environment) -> EvaluationResult {
         match expr.operator.token_type {
-            TokenType::Bang => {
-                match expr.right.evaluate(environment) {
-                    EvaluationResult::Boolean(x) => EvaluationResult::Boolean(!x),
-                    EvaluationResult::Nil => EvaluationResult::Boolean(true),
-                    EvaluationResult::Number(x) => EvaluationResult::Boolean(x == 0 as f64),
-                    
-                    _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number, boolean, or nil".to_string() })
-                }
-            }
-            TokenType::Minus => {
-                match expr.right.evaluate(environment) {
-                    EvaluationResult::Number(x) => EvaluationResult::Number(-x),
-                    _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number".to_string() })
-                }
-            }
-            TokenType::Plus => {
-                match expr.right.evaluate(environment) {
-                    EvaluationResult::Number(x) => EvaluationResult::Number(x),
-                    _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operand must be a number".to_string() })
-                }
-            }
-            _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for unary evaluation".to_string() })
+            TokenType::Bang => match expr.right.evaluate(environment) {
+                EvaluationResult::Boolean(x) => EvaluationResult::Boolean(!x),
+                EvaluationResult::Nil => EvaluationResult::Boolean(true),
+                EvaluationResult::Number(x) => EvaluationResult::Boolean(x == 0 as f64),
+
+                _ => EvaluationResult::Error(EvaluationError {
+                    token: expr.operator.clone(),
+                    message: "Operand must be a number, boolean, or nil".to_string(),
+                }),
+            },
+            TokenType::Minus => match expr.right.evaluate(environment) {
+                EvaluationResult::Number(x) => EvaluationResult::Number(-x),
+                _ => EvaluationResult::Error(EvaluationError {
+                    token: expr.operator.clone(),
+                    message: "Operand must be a number".to_string(),
+                }),
+            },
+            TokenType::Plus => match expr.right.evaluate(environment) {
+                EvaluationResult::Number(x) => EvaluationResult::Number(x),
+                _ => EvaluationResult::Error(EvaluationError {
+                    token: expr.operator.clone(),
+                    message: "Operand must be a number".to_string(),
+                }),
+            },
+            _ => EvaluationResult::Error(EvaluationError {
+                token: expr.operator.clone(),
+                message: "unsupported token_type for unary evaluation".to_string(),
+            }),
         }
     }
 
     fn evaluate_binary(expr: &BinaryExpr, environment: &mut Environment) -> EvaluationResult {
-        let evaluation = (expr.right.evaluate(environment), expr.left.evaluate(environment));
+        let evaluation = (
+            expr.right.evaluate(environment),
+            expr.left.evaluate(environment),
+        );
         let token_type = expr.operator.token_type;
         match token_type {
             TokenType::Minus | TokenType::Slash | TokenType::Star => {
-                if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) = evaluation {
+                if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_float_operation(token_type) {
                         EvaluationResult::Number(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
                 } else {
-                    EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                    EvaluationResult::Error(EvaluationError {
+                        token: expr.operator.clone(),
+                        message: "Operands must be numbers.".to_string(),
+                    })
                 }
             }
             TokenType::Plus => {
-                if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) = evaluation {
+                if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_float_operation(token_type) {
                         EvaluationResult::Number(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
-                } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) = evaluation {
+                } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_str_operation(token_type) {
                         EvaluationResult::Str(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
                 } else {
-                    EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers or strings.".to_string() })
+                    EvaluationResult::Error(EvaluationError {
+                        token: expr.operator.clone(),
+                        message: "Operands must be numbers or strings.".to_string(),
+                    })
                 }
             }
-            TokenType::LessEqual | TokenType::Less | TokenType::Greater | TokenType::GreaterEqual => {
-                if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) = evaluation {
+            TokenType::LessEqual
+            | TokenType::Less
+            | TokenType::Greater
+            | TokenType::GreaterEqual => {
+                if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_float_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
-                } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) = evaluation {
+                } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_str_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
                 } else {
-                    EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers or strings.".to_string() })
+                    EvaluationResult::Error(EvaluationError {
+                        token: expr.operator.clone(),
+                        message: "Operands must be numbers or strings.".to_string(),
+                    })
                 }
             }
             TokenType::EqualEqual | TokenType::BangEqual => {
                 let mut evaluation = evaluation;
-                match evaluation.0 {
-                    EvaluationResult::Nil => {
-                        evaluation.0 = EvaluationResult::Boolean(false);
-                    }
-                    _ => {}
+                if let EvaluationResult::Nil = evaluation.0 {
+                    evaluation.0 = EvaluationResult::Boolean(false);
                 }
-                match evaluation.1 {
-                    EvaluationResult::Nil => {
-                        evaluation.1 = EvaluationResult::Boolean(false);
-                    }
-                    _ => {}
+                if let EvaluationResult::Nil = evaluation.1 {
+                    evaluation.1 = EvaluationResult::Boolean(false);
                 }
                 if Self::is_different_type(&evaluation) {
                     match token_type {
@@ -590,79 +692,77 @@ impl Expr {
                         TokenType::BangEqual => EvaluationResult::Boolean(true),
                         _ => EvaluationResult::Boolean(false),
                     }
-                }
-                else if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) = evaluation {
+                } else if let (EvaluationResult::Number(right), EvaluationResult::Number(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_float_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
-                } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) = evaluation {
+                } else if let (EvaluationResult::Str(right), EvaluationResult::Str(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_str_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
-                } else if let (EvaluationResult::Boolean(right), EvaluationResult::Boolean(left)) = evaluation {
+                } else if let (EvaluationResult::Boolean(right), EvaluationResult::Boolean(left)) =
+                    evaluation
+                {
                     if let Some(operation) = Self::get_bool_comparison(token_type) {
                         EvaluationResult::Boolean(operation(left, right))
                     } else {
-                        EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers.".to_string() })
+                        EvaluationResult::Error(EvaluationError {
+                            token: expr.operator.clone(),
+                            message: "Operands must be numbers.".to_string(),
+                        })
                     }
                 } else {
-                    EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "Operands must be numbers, strings, bool or nil.".to_string() })
+                    EvaluationResult::Error(EvaluationError {
+                        token: expr.operator.clone(),
+                        message: "Operands must be numbers, strings, bool or nil.".to_string(),
+                    })
                 }
             }
-            _ => EvaluationResult::Error(EvaluationError { token: expr.operator.clone(), message: "unsupported token_type for binary evaluation".to_string() })
+            _ => EvaluationResult::Error(EvaluationError {
+                token: expr.operator.clone(),
+                message: "unsupported token_type for binary evaluation".to_string(),
+            }),
         }
     }
 
     fn is_different_type(evaluation: &(EvaluationResult, EvaluationResult)) -> bool {
         let (x, y) = evaluation;
         match x {
-            EvaluationResult::Boolean(_) => {
-                if let EvaluationResult::Boolean(_) = y {
-                    false
-                } else {
-                    true
-                }
-            }
-            EvaluationResult::Str(_) => {
-                if let EvaluationResult::Str(_) = y {
-                    false
-                } else {
-                    true
-                }
-            }
-            EvaluationResult::Nil => {
-                if let EvaluationResult::Nil = y {
-                    false
-                } else {
-                    true
-                }
-            }
-            EvaluationResult::Number(_) => {
-                if let EvaluationResult::Number(_) = y {
-                    false
-                } else {
-                    true
-                }
-            }
-            _ => true
+            EvaluationResult::Boolean(_) => !matches!(y, EvaluationResult::Boolean(_)),
+            EvaluationResult::Str(_) => !matches!(y, EvaluationResult::Str(_)),
+            EvaluationResult::Nil => !matches!(y, EvaluationResult::Nil),
+            EvaluationResult::Number(_) => !matches!(y, EvaluationResult::Number(_)),
+            _ => true,
         }
     }
 
-    fn get_float_operation(token_type: TokenType) -> Option<&'static dyn Fn(f64,f64) -> f64> {
+    fn get_float_operation(token_type: TokenType) -> Option<&'static dyn Fn(f64, f64) -> f64> {
         match token_type {
             TokenType::Slash => Some(&|x: f64, y: f64| x / y),
             TokenType::Star => Some(&|x: f64, y: f64| x * y),
             TokenType::Plus => Some(&|x: f64, y: f64| x + y),
             TokenType::Minus => Some(&|x: f64, y: f64| x - y),
-            _ => None
+            _ => None,
         }
     }
 
-    fn get_str_operation(token_type: TokenType) -> Option<&'static dyn Fn(String,String) -> String> {
+    fn get_str_operation(
+        token_type: TokenType,
+    ) -> Option<&'static dyn Fn(String, String) -> String> {
         match token_type {
             TokenType::Plus => Some(&|x, y| {
                 let mut result = String::new();
@@ -670,31 +770,19 @@ impl Expr {
                 result.push_str(y.as_str());
                 result
             }),
-            _ => None
+            _ => None,
         }
     }
 
-    fn get_bool_comparison(token_type: TokenType) -> Option<&'static dyn Fn(bool,bool) -> bool> {
+    fn get_bool_comparison(token_type: TokenType) -> Option<&'static dyn Fn(bool, bool) -> bool> {
         match token_type {
             TokenType::EqualEqual => Some(&|x, y| x == y),
             TokenType::BangEqual => Some(&|x, y| x != y),
-            _ => None
+            _ => None,
         }
     }
 
-    fn get_float_comparison(token_type: TokenType) -> Option<&'static dyn Fn(f64,f64) -> bool> {
-        match token_type {
-            TokenType::EqualEqual => Some(&|x, y| x == y),
-            TokenType::BangEqual => Some(&|x, y| x != y),
-            TokenType::Less => Some(&|x, y| x < y),
-            TokenType::LessEqual => Some(&|x, y| x <= y),
-            TokenType::Greater => Some(&|x, y| x > y),
-            TokenType::GreaterEqual => Some(&|x, y| x >= y),
-            _ => None
-        }
-    }
-
-    fn get_str_comparison(token_type: TokenType) -> Option<&'static dyn Fn(String,String) -> bool> {
+    fn get_float_comparison(token_type: TokenType) -> Option<&'static dyn Fn(f64, f64) -> bool> {
         match token_type {
             TokenType::EqualEqual => Some(&|x, y| x == y),
             TokenType::BangEqual => Some(&|x, y| x != y),
@@ -702,7 +790,21 @@ impl Expr {
             TokenType::LessEqual => Some(&|x, y| x <= y),
             TokenType::Greater => Some(&|x, y| x > y),
             TokenType::GreaterEqual => Some(&|x, y| x >= y),
-            _ => None
+            _ => None,
+        }
+    }
+
+    fn get_str_comparison(
+        token_type: TokenType,
+    ) -> Option<&'static dyn Fn(String, String) -> bool> {
+        match token_type {
+            TokenType::EqualEqual => Some(&|x, y| x == y),
+            TokenType::BangEqual => Some(&|x, y| x != y),
+            TokenType::Less => Some(&|x, y| x < y),
+            TokenType::LessEqual => Some(&|x, y| x <= y),
+            TokenType::Greater => Some(&|x, y| x > y),
+            TokenType::GreaterEqual => Some(&|x, y| x >= y),
+            _ => None,
         }
     }
 
@@ -711,13 +813,12 @@ impl Expr {
     }
 }
 
-
 impl Statement {
-    fn evaluate(&self, mut environment: &mut Environment) -> EvaluationResult {
+    fn evaluate(&self, environment: &mut Environment) -> EvaluationResult {
         match self {
-            Self::Expr(expr) => expr.evaluate(& mut environment),
+            Self::Expr(expr) => expr.evaluate(environment),
             Self::Print(statement) => {
-                let result = statement.expr.evaluate(& mut environment);
+                let result = statement.expr.evaluate(environment);
                 if let EvaluationResult::Error(_) = result {
                     result
                 } else {
@@ -726,17 +827,25 @@ impl Statement {
                 }
             }
             Self::Var(var_statement) => {
-                match environment.global_vars.get_mut(var_statement.identifier.get_lexem()) {
+                match environment
+                    .global_vars
+                    .get_mut(var_statement.identifier.get_lexem())
+                {
                     None => {
                         if let Some(expr) = &var_statement.expr {
                             let result = expr.evaluate(environment);
                             if let EvaluationResult::Error(_) = result {
                                 return result;
                             } else {
-                                environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), result);
+                                environment
+                                    .global_vars
+                                    .insert(var_statement.identifier.get_lexem().clone(), result);
                             }
                         } else {
-                            environment.global_vars.insert(var_statement.identifier.get_lexem().clone(), EvaluationResult::Nil);
+                            environment.global_vars.insert(
+                                var_statement.identifier.get_lexem().clone(),
+                                EvaluationResult::Nil,
+                            );
                         }
                         EvaluationResult::Nil
                     }
@@ -746,7 +855,10 @@ impl Statement {
                             if let EvaluationResult::Error(_) = result {
                                 return result;
                             } else {
-                                let item = environment.global_vars.get_mut(var_statement.identifier.get_lexem()).unwrap();
+                                let item = environment
+                                    .global_vars
+                                    .get_mut(var_statement.identifier.get_lexem())
+                                    .unwrap();
                                 *item = result;
                             }
                         } else {
@@ -765,7 +877,7 @@ pub struct Environment {
 }
 
 struct LoxAstExpression {
-    root: Expr
+    root: Expr,
 }
 
 struct LoxAstProgram {
@@ -778,8 +890,10 @@ impl Ast for LoxAstExpression {
     }
 
     fn evaluate(&self) -> traits::EvaluationResult {
-        let mut environment = Environment{ global_vars: HashMap::new() };
-        self.root.evaluate(& mut environment)
+        let mut environment = Environment {
+            global_vars: HashMap::new(),
+        };
+        self.root.evaluate(&mut environment)
     }
 }
 
@@ -794,7 +908,12 @@ impl fmt::Display for Statement {
             }
             Self::Var(var_statement) => {
                 if let Some(expr) = &var_statement.expr {
-                    write!(f, "(var {} {})", var_statement.identifier.evaluate_str(), expr)
+                    write!(
+                        f,
+                        "(var {} {})",
+                        var_statement.identifier.evaluate_str(),
+                        expr
+                    )
                 } else {
                     write!(f, "(var {})", var_statement.identifier.evaluate_str())
                 }
@@ -805,7 +924,6 @@ impl fmt::Display for Statement {
 
 impl Ast for LoxAstProgram {
     fn print(&self) {
-
         for statement in self.statements.iter() {
             println!("{}", statement)
         }
@@ -813,9 +931,11 @@ impl Ast for LoxAstProgram {
 
     fn evaluate(&self) -> traits::EvaluationResult {
         let mut eval = EvaluationResult::Nil;
-        let mut environment = Environment{ global_vars: HashMap::new() };
+        let mut environment = Environment {
+            global_vars: HashMap::new(),
+        };
         for statement in self.statements.iter() {
-            eval = statement.evaluate(& mut environment);
+            eval = statement.evaluate(&mut environment);
             if let EvaluationResult::Error(_) = eval {
                 return eval;
             }
@@ -832,45 +952,38 @@ pub struct ParserError {
 pub struct LoxParser {
     current: usize,
     tokens: Vec<Rc<Token>>,
-} 
+}
 
 impl LoxParser {
     pub fn new(tokens: Vec<Rc<Token>>) -> Self {
-        Self {
-            current: 0,
-            tokens
-        }
+        Self { current: 0, tokens }
     }
 
     pub fn parse_expression(&mut self) -> Result<impl Ast, ParserError> {
         match self.expression() {
-            Ok(ast) => Ok(LoxAstExpression{root: ast}),
-            Err(x) => Err(x)
+            Ok(ast) => Ok(LoxAstExpression { root: ast }),
+            Err(x) => Err(x),
         }
     }
 
     pub fn parse_program(&mut self) -> Result<impl Ast, ParserError> {
         match self.program() {
-            Ok(statements) => Ok(LoxAstProgram{statements}),
-            Err(x) => Err(x)
+            Ok(statements) => Ok(LoxAstProgram { statements }),
+            Err(x) => Err(x),
         }
     }
 
     fn program(&mut self) -> Result<Vec<Statement>, ParserError> {
         let mut statements = Vec::<Statement>::new();
-        while self.match_cond(|x| {
-            match x.token_type {
-                TokenType::EOF => true,
-                _ => false
-            }
-        }).is_none() {
+        while self
+            .match_cond(|x| matches!(x.token_type, TokenType::Eof))
+            .is_none()
+        {
             match self.declaration() {
                 Ok(statement) => {
                     statements.push(statement);
                 }
-                Err(err) => {
-                    return Err(err)
-                }
+                Err(err) => return Err(err),
             }
         }
         Ok(statements)
@@ -879,81 +992,78 @@ impl LoxParser {
     fn declaration(&mut self) -> Result<Statement, ParserError> {
         match self.var_decl() {
             Ok(expr) => Ok(expr),
-            Err(_) => {
-                self.statement()
-            }
+            Err(_) => self.statement(),
         }
     }
 
     fn var_decl(&mut self) -> Result<Statement, ParserError> {
-        if let Some(_) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::Var => true,
-                _ => false
-            }
-        }) {
-            if let Some(token_identifier) = self.match_cond(|x| {
-                match x.token_type {
-                    TokenType::Identifier => true,
-                    _ => false
-                }
-            }) {
+        if self
+            .match_cond(|x| matches!(x.token_type, TokenType::Var))
+            .is_some()
+        {
+            if let Some(token_identifier) =
+                self.match_cond(|x| matches!(x.token_type, TokenType::Identifier))
+            {
                 let mut res_expr = None;
-                if let Some(_) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::Equal => true,
-                        _ => false
-                    }
-                }) {
+                if self
+                    .match_cond(|x| matches!(x.token_type, TokenType::Equal))
+                    .is_some()
+                {
                     let expr = self.expression();
                     if let Err(err) = expr {
                         return Err(err);
-                    } else {
-                        if let Ok(expr) = expr {
-                            res_expr = Some(expr)
-                        }
+                    } else if let Ok(expr) = expr {
+                        res_expr = Some(expr)
                     }
                 }
-                if let Some(_) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::SemiColon => true,
-                        _ => false
-                    }
-                    }) {
-                        Ok(Statement::Var(VarStatement{identifier: token_identifier, expr: res_expr}))
-                    } else {
-                        Err(ParserError{token: self.peek().unwrap(), message: "Missing semicolon.".to_string()})
-                    }
+                if self
+                    .match_cond(|x| matches!(x.token_type, TokenType::SemiColon))
+                    .is_some()
+                {
+                    Ok(Statement::Var(VarStatement {
+                        identifier: token_identifier,
+                        expr: res_expr,
+                    }))
+                } else {
+                    Err(ParserError {
+                        token: self.peek().unwrap(),
+                        message: "Missing semicolon.".to_string(),
+                    })
+                }
             } else {
-                Err(ParserError{token: self.peek().unwrap(), message: "Missing identifier.".to_string()})
+                Err(ParserError {
+                    token: self.peek().unwrap(),
+                    message: "Missing identifier.".to_string(),
+                })
             }
         } else {
-            Err(ParserError{token: self.peek().unwrap(), message: "Missing var keyword.".to_string()})
+            Err(ParserError {
+                token: self.peek().unwrap(),
+                message: "Missing var keyword.".to_string(),
+            })
         }
     }
-
 
     fn statement(&mut self) -> Result<Statement, ParserError> {
         match self.print_statement() {
             Ok(expr) => Ok(expr),
-            Err(_) => {
-                self.expression_statement()
-            }
+            Err(_) => self.expression_statement(),
         }
     }
 
     fn expression_statement(&mut self) -> Result<Statement, ParserError> {
         match self.expression() {
             Ok(expr) => {
-                if let Some(_) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::SemiColon => true,
-                        _ => false
-                    }
-                }) {
+                if self
+                    .match_cond(|x| matches!(x.token_type, TokenType::SemiColon))
+                    .is_some()
+                {
                     Ok(Statement::Expr(expr))
                 } else {
-                    Err(ParserError{token: self.peek().unwrap(), message: "Missing semicolon.".to_string()})
+                    Err(ParserError {
+                        token: self.peek().unwrap(),
+                        message: "Missing semicolon.".to_string(),
+                    })
                 }
             }
             Err(err) => Err(err),
@@ -961,29 +1071,28 @@ impl LoxParser {
     }
 
     fn print_statement(&mut self) -> Result<Statement, ParserError> {
-        if let Some(token_print) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::Print => true,
-                _ => false
-            }
-        }) {
+        if let Some(token_print) = self.match_cond(|x| matches!(x.token_type, TokenType::Print)) {
             match self.expression() {
                 Ok(expr) => {
-                    if let Some(_) = self.match_cond(|x| {
-                        match x.token_type {
-                            TokenType::SemiColon => true,
-                            _ => false
-                        }
-                    }) {
-                        Ok(Statement::Print(PrintStatement{expr}))
+                    if self
+                        .match_cond(|x| matches!(x.token_type, TokenType::SemiColon))
+                        .is_some()
+                    {
+                        Ok(Statement::Print(PrintStatement { expr }))
                     } else {
-                        Err(ParserError{token: token_print, message: "Missing semicolon.".to_string()})
+                        Err(ParserError {
+                            token: token_print,
+                            message: "Missing semicolon.".to_string(),
+                        })
                     }
                 }
-                Err(err) => Err(err)
+                Err(err) => Err(err),
             }
         } else {
-            Err(ParserError{token: self.peek().unwrap(), message: "Missing print token.".to_string()})
+            Err(ParserError {
+                token: self.peek().unwrap(),
+                message: "Missing print token.".to_string(),
+            })
         }
     }
 
@@ -996,19 +1105,22 @@ impl LoxParser {
             Ok(expr) => {
                 let mut expr = expr;
                 while let Some(token) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::EqualEqual | TokenType::BangEqual => true,
-                        _ => false
-                    }
+                    matches!(x.token_type, TokenType::EqualEqual | TokenType::BangEqual)
                 }) {
                     match self.condition() {
-                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
-                        Err(err) => return Err(err)
+                        Ok(right) => {
+                            expr = Expr::Binary(BinaryExpr {
+                                left: Rc::new(expr),
+                                operator: token,
+                                right: Rc::new(right),
+                            })
+                        }
+                        Err(err) => return Err(err),
                     }
                 }
-                return Ok(expr);
+                Ok(expr)
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
@@ -1017,19 +1129,28 @@ impl LoxParser {
             Ok(expr) => {
                 let mut expr = expr;
                 while let Some(token) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => true,
-                        _ => false
-                    }
+                    matches!(
+                        x.token_type,
+                        TokenType::Greater
+                            | TokenType::GreaterEqual
+                            | TokenType::Less
+                            | TokenType::LessEqual
+                    )
                 }) {
                     match self.term() {
-                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
-                        Err(err) => return Err(err)
+                        Ok(right) => {
+                            expr = Expr::Binary(BinaryExpr {
+                                left: Rc::new(expr),
+                                operator: token,
+                                right: Rc::new(right),
+                            })
+                        }
+                        Err(err) => return Err(err),
                     }
                 }
-                return Ok(expr);
+                Ok(expr)
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
@@ -1037,20 +1158,23 @@ impl LoxParser {
         match self.factor() {
             Ok(expr) => {
                 let mut expr = expr;
-                while let Some(token) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::Plus | TokenType::Minus => true,
-                        _ => false
-                    }
-                }) {
+                while let Some(token) =
+                    self.match_cond(|x| matches!(x.token_type, TokenType::Plus | TokenType::Minus))
+                {
                     match self.factor() {
-                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
-                        Err(err) => return Err(err)
+                        Ok(right) => {
+                            expr = Expr::Binary(BinaryExpr {
+                                left: Rc::new(expr),
+                                operator: token,
+                                right: Rc::new(right),
+                            })
+                        }
+                        Err(err) => return Err(err),
                     }
                 }
-                return Ok(expr);
+                Ok(expr)
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
@@ -1058,34 +1182,36 @@ impl LoxParser {
         match self.unary() {
             Ok(expr) => {
                 let mut expr = expr;
-                while let Some(token) = self.match_cond(|x| {
-                    match x.token_type {
-                        TokenType::Slash | TokenType::Star => true,
-                        _ => false
-                    }
-                }) {
+                while let Some(token) =
+                    self.match_cond(|x| matches!(x.token_type, TokenType::Slash | TokenType::Star))
+                {
                     match self.unary() {
-                        Ok(right) => expr = Expr::Binary(BinaryExpr{left: Rc::new(expr), operator: token, right: Rc::new(right)}),
-                        Err(err) => return Err(err)
+                        Ok(right) => {
+                            expr = Expr::Binary(BinaryExpr {
+                                left: Rc::new(expr),
+                                operator: token,
+                                right: Rc::new(right),
+                            })
+                        }
+                        Err(err) => return Err(err),
                     }
                 }
-                return Ok(expr);
+                Ok(expr)
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
-
     fn unary(&mut self) -> Result<Expr, ParserError> {
-        if let Some(token) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::Bang | TokenType::Minus => true,
-                _ => false
-            }
-        }) {
+        if let Some(token) =
+            self.match_cond(|x| matches!(x.token_type, TokenType::Bang | TokenType::Minus))
+        {
             match self.unary() {
-                Ok(expr) => Ok(Expr::Unary(UnaryExpr{operator: token, right: Box::new(expr)})),
-                Err(x) => Err(x)
+                Ok(expr) => Ok(Expr::Unary(UnaryExpr {
+                    operator: token,
+                    right: Box::new(expr),
+                })),
+                Err(x) => Err(x),
             }
         } else {
             self.primary()
@@ -1094,10 +1220,15 @@ impl LoxParser {
 
     fn primary(&mut self) -> Result<Expr, ParserError> {
         if let Some(token) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::False | TokenType::True | TokenType::Nil | TokenType::Number | TokenType::String | TokenType::Identifier => true,
-                _ => false
-            }
+            matches!(
+                x.token_type,
+                TokenType::False
+                    | TokenType::True
+                    | TokenType::Nil
+                    | TokenType::Number
+                    | TokenType::String
+                    | TokenType::Identifier
+            )
         }) {
             Ok(Expr::Primary(token))
         } else {
@@ -1106,30 +1237,33 @@ impl LoxParser {
     }
 
     fn group(&mut self) -> Result<Expr, ParserError> {
-        if let Some(_) = self.match_cond(|x| {
-            match x.token_type {
-                TokenType::LeftParent => true,
-                _ => false
-            }
-        }) {
+        if self
+            .match_cond(|x| matches!(x.token_type, TokenType::LeftParent))
+            .is_some()
+        {
             match self.equality() {
                 Ok(expr) => {
-                    if let Some(_) = self.match_cond(|x| {
-                        match x.token_type {
-                            TokenType::RightParent => true,
-                            _ => false
-                        }
-                    }) {
-                        Ok(Expr::Group(GroupExpr{expr: Box::new(expr)}))
+                    if self
+                        .match_cond(|x| matches!(x.token_type, TokenType::RightParent))
+                        .is_some()
+                    {
+                        Ok(Expr::Group(GroupExpr {
+                            expr: Box::new(expr),
+                        }))
                     } else {
-                        Err(ParserError{token: self.peek().unwrap(), message: "Expect expression.".to_string()})
+                        Err(ParserError {
+                            token: self.peek().unwrap(),
+                            message: "Expect expression.".to_string(),
+                        })
                     }
                 }
-                Err(x) => Err(x)
+                Err(x) => Err(x),
             }
-        }
-        else {
-            Err(ParserError{token: self.peek().unwrap(), message: "Expect expression.".to_string()})
+        } else {
+            Err(ParserError {
+                token: self.peek().unwrap(),
+                message: "Expect expression.".to_string(),
+            })
         }
     }
 
@@ -1148,10 +1282,6 @@ impl LoxParser {
             return None;
         }
         let item = self.tokens.get(self.current);
-        match item {
-            Some(x) => Some(x.clone()),
-            None => None
-        }
+        item.cloned()
     }
-    
 }

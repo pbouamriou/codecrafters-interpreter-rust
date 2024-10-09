@@ -1,11 +1,10 @@
 use std::fmt;
 use std::rc::Rc;
 
-
 #[derive(Clone)]
 pub struct Position {
     pub line_number: u32,
-    pub position : u32,
+    pub position: u32,
 }
 
 pub enum MatchResult {
@@ -14,10 +13,10 @@ pub enum MatchResult {
 }
 
 pub trait Scanner {
-    fn match_char(& mut self, character: char) -> Option<bool>;
-    fn match_not_char(& mut self, character: char) -> Option<MatchResult>;
-    fn match_with_fn(& mut self, match_fn: impl FnMut(char) -> bool) -> Option<MatchResult>;
-    fn get_char(& mut self) -> Option<char>;
+    fn match_char(&mut self, character: char) -> Option<bool>;
+    fn match_not_char(&mut self, character: char) -> Option<MatchResult>;
+    fn match_with_fn(&mut self, match_fn: impl FnMut(char) -> bool) -> Option<MatchResult>;
+    fn get_char(&mut self) -> Option<char>;
     fn get_position(&self) -> Position;
 }
 
@@ -65,7 +64,7 @@ pub enum TokenType {
     True,
     Var,
     While,
-    EOF
+    Eof,
 }
 
 #[derive(Clone)]
@@ -80,7 +79,7 @@ pub struct Token {
 #[derive(Clone)]
 pub struct EvaluationError {
     pub token: Rc<Token>,
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Clone)]
@@ -89,9 +88,8 @@ pub enum EvaluationResult {
     Number(f64),
     Boolean(bool),
     Nil,
-    Error(EvaluationError)
+    Error(EvaluationError),
 }
-
 
 impl fmt::Display for EvaluationResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -100,7 +98,11 @@ impl fmt::Display for EvaluationResult {
             EvaluationResult::Str(x) => write!(f, "{}", x),
             EvaluationResult::Number(x) => write!(f, "{}", x),
             EvaluationResult::Nil => write!(f, "nil"),
-            EvaluationResult::Error(err) => write!(f, "[line {}]: {}", err.token.position.line_number, err.message),
+            EvaluationResult::Error(err) => write!(
+                f,
+                "[line {}]: {}",
+                err.token.position.line_number, err.message
+            ),
         }
     }
 }
