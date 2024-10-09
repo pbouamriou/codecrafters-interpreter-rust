@@ -107,7 +107,14 @@ impl fmt::Display for EvaluationResult {
     }
 }
 
-pub trait Ast {
+pub trait AstPrint {
     fn print(&self);
+}
+pub trait AstEvaluation {
     fn evaluate(&self) -> EvaluationResult;
+}
+
+pub struct Ast {
+    pub printable: Rc<dyn AstPrint>,
+    pub evaluable: Rc<dyn AstEvaluation>,
 }

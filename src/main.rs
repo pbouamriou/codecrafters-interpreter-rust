@@ -1,9 +1,8 @@
 mod lox;
 
+use lox::parser::LoxParser;
+use lox::scanner::LoxScanner;
 use lox::traits::EvaluationResult;
-
-use crate::lox::traits::Ast;
-use crate::lox::{LoxParser, LoxScanner};
 
 use std::env;
 use std::fs;
@@ -88,7 +87,7 @@ fn main() -> AppExitCode {
                             );
                             return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                         }
-                        Ok(ast) => ast.print(),
+                        Ok(ast) => ast.printable.print(),
                     }
                     AppExitCode::Ok
                 }
@@ -118,7 +117,7 @@ fn main() -> AppExitCode {
                             return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                         }
                         Ok(ast) => {
-                            let result = ast.evaluate();
+                            let result = ast.evaluable.evaluate();
                             match result {
                                 EvaluationResult::Error(_) => {
                                     eprintln!("{}", result);
@@ -157,7 +156,7 @@ fn main() -> AppExitCode {
                             return AppExitCode::Err(ApplicationErrorCode::UnexpectedCaracter);
                         }
                         Ok(ast) => {
-                            let result = ast.evaluate();
+                            let result = ast.evaluable.evaluate();
                             match result {
                                 EvaluationResult::Error(err) => {
                                     eprintln!(
