@@ -5,7 +5,7 @@ use crate::lox::{
 
 use std::collections::HashMap;
 
-use super::traits::AstEvaluation;
+use super::{parser::GroupAssignment, traits::AstEvaluation};
 
 impl AstEvaluation for LoxAstExpression {
     fn evaluate(&self) -> EvaluationResult {
@@ -43,6 +43,32 @@ impl Expr {
             Expr::Unary(expr) => Self::evaluate_unary(expr, environment),
             Expr::Group(expr) => Self::evaluate_group(expr, environment),
             Expr::Binary(expr) => Self::evaluate_binary(expr, environment),
+            Expr::Assignment(expr) => Self::evaluate_assignment(expr, environment),
+        }
+    }
+
+    fn evaluate_assignment(
+        expr: &GroupAssignment,
+        environment: &mut Environment,
+    ) -> EvaluationResult {
+        let result = expr.expr.evaluate(environment);
+        match environment.global_vars.get_mut(expr.identifier.get_lexem()) {
+            None => {
+                if let EvaluationResult::Error(_) = result {
+                } else {
+                    environment
+                        .global_vars
+                        .insert(expr.identifier.get_lexem().clone(), result.clone());
+                }
+                result
+            }
+            Some(item) => {
+                if let EvaluationResult::Error(_) = result {
+                } else {
+                    *item = result.clone();
+                }
+                result
+            }
         }
     }
 

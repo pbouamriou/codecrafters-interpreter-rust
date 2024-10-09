@@ -1,1 +1,5 @@
-var foo = quz;
+var foo;
+var x;
+foo = x = 10;
+print x;
+print foo;

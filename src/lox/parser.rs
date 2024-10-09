@@ -26,6 +26,11 @@ pub struct VarStatement {
     pub expr: Option<Expr>,
 }
 
+pub struct GroupAssignment {
+    pub identifier: Rc<Token>,
+    pub expr: Box<Expr>,
+}
+
 pub enum Statement {
     Expr(Expr),
     Print(PrintStatement),
@@ -37,6 +42,7 @@ pub enum Expr {
     Binary(BinaryExpr),
     Unary(UnaryExpr),
     Group(GroupExpr),
+    Assignment(GroupAssignment),
 }
 
 pub struct ParserError {
@@ -255,7 +261,25 @@ impl LoxParser {
     }
 
     fn expression(&mut self) -> Result<Expr, ParserError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParserError> {
+        if let Some(token_identifier) = self.match_cond_sequence(&[
+            Box::new(|x: Rc<Token>| matches!(x.token_type, TokenType::Identifier)),
+            Box::new(|x: Rc<Token>| matches!(x.token_type, TokenType::Equal)),
+        ]) {
+            let assignment = self.assignment();
+            match assignment {
+                Err(_) => assignment,
+                Ok(expr) => Ok(Expr::Assignment(GroupAssignment {
+                    identifier: token_identifier.first().unwrap().clone(),
+                    expr: Box::new(expr),
+                })),
+            }
+        } else {
+            self.equality()
+        }
     }
 
     fn equality(&mut self) -> Result<Expr, ParserError> {
@@ -425,6 +449,31 @@ impl LoxParser {
         }
     }
 
+    fn match_cond_sequence(
+        &mut self,
+        cond_seq: &[Box<dyn Fn(Rc<Token>) -> bool>],
+    ) -> Option<Vec<Rc<Token>>> {
+        let current_position = self.current;
+        let mut result: Option<Vec<Rc<Token>>> = None;
+        for cond in cond_seq.iter() {
+            if let Some(token) = self.peek() {
+                if cond(token.clone()) {
+                    self.current += 1;
+                    if let None = result {
+                        result = Some(Vec::new());
+                    }
+                    if let Some(x) = result.as_mut() {
+                        x.push(token.clone());
+                    }
+                } else {
+                    self.current = current_position;
+                    return None;
+                }
+            }
+        }
+        result
+    }
+
     fn match_cond(&mut self, cond: impl Fn(Rc<Token>) -> bool) -> Option<Rc<Token>> {
         if let Some(token) = self.peek() {
             if cond(token.clone()) {
@@ -465,6 +514,9 @@ impl fmt::Display for Expr {
                     expr.left,
                     expr.right
                 )
+            }
+            Expr::Assignment(expr) => {
+                write!(f, "({} {})", expr.identifier.parse(), expr.expr)
             }
         }
     }
