@@ -1,0 +1,18 @@
+{
+    var foo;
+    var x;
+    foo = x = 10;
+    print x;
+    print foo;
+}
+{
+    var y = 100;
+    print y / 20;
+    {
+        var z = 25;
+        var y = y+z;
+        print z;
+        print y;
+    }
+    print "end";
+}

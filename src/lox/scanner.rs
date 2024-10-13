@@ -125,7 +125,7 @@ impl Token {
             }
             TokenType::String => EvaluationResult::Str(self.raw_evaluate().to_string()),
             TokenType::Identifier => {
-                if let Some(result) = environment.global_vars.get(self.get_lexem()) {
+                if let Some(result) = environment.value(self.get_lexem()) {
                     result.clone()
                 } else {
                     EvaluationResult::Error(EvaluationError {

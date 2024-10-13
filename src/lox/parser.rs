@@ -35,6 +35,7 @@ pub enum Statement {
     Expr(Expr),
     Print(PrintStatement),
     Var(VarStatement),
+    Block(Vec<Statement>),
 }
 
 pub enum Expr {
@@ -83,6 +84,13 @@ impl fmt::Display for Statement {
                 } else {
                     write!(f, "(var {})", var_statement.identifier.evaluate_str())
                 }
+            }
+            Self::Block(statements) => {
+                write!(f, "(block ")?;
+                for statement in statements.iter() {
+                    write!(f, "{}", statement)?;
+                }
+                write!(f, " )")
             }
         }
     }
@@ -211,7 +219,38 @@ impl LoxParser {
     fn statement(&mut self) -> Result<Statement, ParserError> {
         match self.print_statement() {
             Ok(expr) => Ok(expr),
-            Err(_) => self.expression_statement(),
+            Err(_) => match self.expression_statement() {
+                Ok(statement) => Ok(statement),
+                Err(_) => self.block(),
+            },
+        }
+    }
+
+    fn block(&mut self) -> Result<Statement, ParserError> {
+        if self
+            .match_cond(|x| matches!(x.token_type, TokenType::LeftBrace))
+            .is_some()
+        {
+            let mut statements = Vec::<Statement>::new();
+            while self
+                .match_cond(|x| matches!(x.token_type, TokenType::RightBrace))
+                .is_none()
+            {
+                match self.declaration() {
+                    Ok(statement) => {
+                        statements.push(statement);
+                    }
+                    Err(err) => {
+                        return Err(err);
+                    }
+                }
+            }
+            Ok(Statement::Block(statements))
+        } else {
+            Err(ParserError {
+                token: self.peek().unwrap(),
+                message: "Missing {.".to_string(),
+            })
         }
     }
 
@@ -459,7 +498,7 @@ impl LoxParser {
             if let Some(token) = self.peek() {
                 if cond(token.clone()) {
                     self.current += 1;
-                    if let None = result {
+                    if result.is_none() {
                         result = Some(Vec::new());
                     }
                     if let Some(x) = result.as_mut() {

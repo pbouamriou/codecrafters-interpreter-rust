@@ -2,16 +2,119 @@ use crate::lox::{
     BinaryExpr, EvaluationError, EvaluationResult, Expr, GroupExpr, LoxAstExpression,
     LoxAstProgram, Statement, TokenType, UnaryExpr,
 };
+use std::rc::Weak;
+use std::{cell::RefCell, rc::Rc};
 
 use std::collections::HashMap;
 
 use super::{parser::GroupAssignment, traits::AstEvaluation};
 
+pub struct Scope {
+    next_block: Option<RefCell<Rc<RefCell<Scope>>>>,
+    previous_block: Option<RefCell<Weak<RefCell<Scope>>>>,
+    vars: HashMap<String, EvaluationResult>,
+}
+
+pub struct Environment {
+    current_scope: RefCell<Rc<RefCell<Scope>>>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        let current_scope = Rc::new(RefCell::new(Scope {
+            next_block: None,
+            previous_block: None,
+            vars: HashMap::new(),
+        }));
+        Self {
+            current_scope: RefCell::new(current_scope),
+        }
+    }
+
+    pub fn value(&self, variable_name: &str) -> Option<EvaluationResult> {
+        loop {
+            match self.current_scope.borrow().borrow().vars.get(variable_name) {
+                Some(x) => {
+                    return Some(x.clone());
+                }
+                None => {
+                    if let Some(parent) = self.current_scope.borrow().borrow().next_block.clone() {
+                        let mut current_scope = self.current_scope.borrow_mut();
+                        *current_scope = parent.into_inner().clone();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn add_variable(&mut self, variable_name: &str, value: EvaluationResult) -> bool {
+        if self
+            .current_scope
+            .borrow()
+            .borrow()
+            .vars
+            .contains_key(variable_name)
+        {
+            let cell_scope = self.current_scope.borrow();
+            let mut scope = cell_scope.borrow_mut();
+            let item = scope.vars.get_mut(variable_name).unwrap();
+            *item = value;
+            true
+        } else {
+            self.current_scope
+                .borrow()
+                .borrow_mut()
+                .vars
+                .insert(variable_name.to_string(), value);
+            true
+        }
+    }
+
+    fn has_parent_scope(&self) -> bool {
+        self.current_scope
+            .borrow()
+            .borrow()
+            .previous_block
+            .is_some()
+    }
+
+    fn leave_scope(&mut self) {
+        if self.has_parent_scope() {
+            let previous_scope = self
+                .current_scope
+                .borrow()
+                .borrow()
+                .previous_block
+                .clone()
+                .unwrap();
+            previous_scope
+                .borrow()
+                .upgrade()
+                .unwrap()
+                .borrow_mut()
+                .next_block = None;
+            let mut current = self.current_scope.borrow_mut();
+            *current = previous_scope.borrow().upgrade().unwrap();
+        }
+    }
+
+    fn enter_scope(&mut self) {
+        let current_scope = &*self.current_scope.borrow();
+        let scope = RefCell::new(Rc::new(RefCell::new(Scope {
+            next_block: None,
+            previous_block: Some(RefCell::new(Rc::downgrade(current_scope))),
+            vars: HashMap::new(),
+        })));
+        current_scope.borrow_mut().next_block = Some(scope);
+    }
+}
+
 impl AstEvaluation for LoxAstExpression {
     fn evaluate(&self) -> EvaluationResult {
-        let mut environment = Environment {
-            global_vars: HashMap::new(),
-        };
+        let mut environment = Environment::new();
         self.root.evaluate(&mut environment)
     }
 }
@@ -19,9 +122,7 @@ impl AstEvaluation for LoxAstExpression {
 impl AstEvaluation for LoxAstProgram {
     fn evaluate(&self) -> EvaluationResult {
         let mut eval = EvaluationResult::Nil;
-        let mut environment = Environment {
-            global_vars: HashMap::new(),
-        };
+        let mut environment = Environment::new();
         for statement in self.statements.iter() {
             eval = statement.evaluate(&mut environment);
             if let EvaluationResult::Error(_) = eval {
@@ -30,10 +131,6 @@ impl AstEvaluation for LoxAstProgram {
         }
         eval
     }
-}
-
-pub struct Environment {
-    pub global_vars: HashMap<String, EvaluationResult>,
 }
 
 impl Expr {
@@ -52,24 +149,8 @@ impl Expr {
         environment: &mut Environment,
     ) -> EvaluationResult {
         let result = expr.expr.evaluate(environment);
-        match environment.global_vars.get_mut(expr.identifier.get_lexem()) {
-            None => {
-                if let EvaluationResult::Error(_) = result {
-                } else {
-                    environment
-                        .global_vars
-                        .insert(expr.identifier.get_lexem().clone(), result.clone());
-                }
-                result
-            }
-            Some(item) => {
-                if let EvaluationResult::Error(_) = result {
-                } else {
-                    *item = result.clone();
-                }
-                result
-            }
-        }
+        environment.add_variable(expr.identifier.get_lexem(), result.clone());
+        result
     }
 
     fn evaluate_unary(expr: &UnaryExpr, environment: &mut Environment) -> EvaluationResult {
@@ -342,47 +423,29 @@ impl Statement {
                     result
                 }
             }
-            Self::Var(var_statement) => {
-                match environment
-                    .global_vars
-                    .get_mut(var_statement.identifier.get_lexem())
-                {
-                    None => {
-                        if let Some(expr) = &var_statement.expr {
-                            let result = expr.evaluate(environment);
-                            if let EvaluationResult::Error(_) = result {
-                                return result;
-                            } else {
-                                environment
-                                    .global_vars
-                                    .insert(var_statement.identifier.get_lexem().clone(), result);
-                            }
-                        } else {
-                            environment.global_vars.insert(
-                                var_statement.identifier.get_lexem().clone(),
-                                EvaluationResult::Nil,
-                            );
-                        }
-                        EvaluationResult::Nil
-                    }
-                    Some(item) => {
-                        if let Some(expr) = &var_statement.expr {
-                            let result = expr.evaluate(environment);
-                            if let EvaluationResult::Error(_) = result {
-                                return result;
-                            } else {
-                                let item = environment
-                                    .global_vars
-                                    .get_mut(var_statement.identifier.get_lexem())
-                                    .unwrap();
-                                *item = result;
-                            }
-                        } else {
-                            *item = EvaluationResult::Nil;
-                        }
-                        EvaluationResult::Nil
+            Self::Block(statements) => {
+                environment.enter_scope();
+                let mut last_result = EvaluationResult::Nil;
+                for statement in statements.iter() {
+                    let result = statement.evaluate(environment);
+                    last_result = result;
+                    if let EvaluationResult::Error(_) = last_result {
+                        break;
                     }
                 }
+                environment.leave_scope();
+                last_result
+            }
+            Self::Var(var_statement) => {
+                let mut result = EvaluationResult::Nil;
+                if let Some(expr) = &var_statement.expr {
+                    result = expr.evaluate(environment);
+                    if let EvaluationResult::Error(_) = result {
+                        return result;
+                    }
+                }
+                environment.add_variable(var_statement.identifier.get_lexem(), result);
+                EvaluationResult::Nil
             }
         }
     }
