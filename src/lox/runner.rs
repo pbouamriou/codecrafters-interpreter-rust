@@ -17,6 +17,7 @@ pub struct Scope {
 
 pub struct Environment {
     current_scope: RefCell<Rc<RefCell<Scope>>>,
+    _root_scope: Rc<RefCell<Scope>>,
 }
 
 impl Environment {
@@ -26,28 +27,61 @@ impl Environment {
             previous_block: None,
             vars: HashMap::new(),
         }));
+        let _root_scope = current_scope.clone();
         Self {
             current_scope: RefCell::new(current_scope),
+            _root_scope,
         }
     }
 
     pub fn value(&self, variable_name: &str) -> Option<EvaluationResult> {
+        let mut current = self.current_scope.borrow().clone();
         loop {
-            match self.current_scope.borrow().borrow().vars.get(variable_name) {
-                Some(x) => {
-                    return Some(x.clone());
-                }
-                None => {
-                    if let Some(parent) = self.current_scope.borrow().borrow().next_block.clone() {
-                        let mut current_scope = self.current_scope.borrow_mut();
-                        *current_scope = parent.into_inner().clone();
-                    } else {
-                        break;
+            current = {
+                let exists = |x: Rc<RefCell<Scope>>| x.borrow().vars.get(variable_name).cloned();
+                match exists(current.clone()) {
+                    Some(x) => {
+                        return Some(x.clone());
+                    }
+                    None => {
+                        if let Some(parent) = current.borrow().previous_block.clone() {
+                            parent.borrow().upgrade().unwrap()
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
         }
         None
+    }
+
+    fn assign_variable(&mut self, variable_name: &str, value: EvaluationResult) -> bool {
+        let mut current = self.current_scope.borrow().clone();
+        loop {
+            current = {
+                let exists = |x: Rc<RefCell<Scope>>| x.borrow().vars.get(variable_name).cloned();
+                match exists(current.clone()) {
+                    Some(_) => {
+                        let assign = |x: Rc<RefCell<Scope>>, y: EvaluationResult| {
+                            let mut borrow = x.borrow_mut();
+                            let value = borrow.vars.get_mut(variable_name).unwrap();
+                            *value = y;
+                        };
+                        assign(current, value);
+                        return true;
+                    }
+                    None => {
+                        if let Some(parent) = current.borrow().previous_block.clone() {
+                            parent.borrow().upgrade().unwrap()
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn add_variable(&mut self, variable_name: &str, value: EvaluationResult) -> bool {
@@ -102,13 +136,18 @@ impl Environment {
     }
 
     fn enter_scope(&mut self) {
-        let current_scope = &*self.current_scope.borrow();
-        let scope = RefCell::new(Rc::new(RefCell::new(Scope {
+        // current.next = new_scope
+        // new_scope.previos = current
+        // current = new_scope
+        let current_scope = &mut *self.current_scope.borrow_mut();
+        let rc_scope = Rc::new(RefCell::new(Scope {
             next_block: None,
             previous_block: Some(RefCell::new(Rc::downgrade(current_scope))),
             vars: HashMap::new(),
-        })));
+        }));
+        let scope = RefCell::new(rc_scope.clone());
         current_scope.borrow_mut().next_block = Some(scope);
+        *current_scope = rc_scope;
     }
 }
 
@@ -149,7 +188,7 @@ impl Expr {
         environment: &mut Environment,
     ) -> EvaluationResult {
         let result = expr.expr.evaluate(environment);
-        environment.add_variable(expr.identifier.get_lexem(), result.clone());
+        environment.assign_variable(expr.identifier.get_lexem(), result.clone());
         result
     }
 
