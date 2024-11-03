@@ -1,7 +1,9 @@
-use crate::lox::{
-    BinaryExpr, EvaluationError, EvaluationResult, Expr, GroupExpr, LoxAstExpression,
-    LoxAstProgram, Statement, TokenType, UnaryExpr,
+use super::private::{
+    BinaryExpr, EvaluationError, Expr, GroupExpr, LoxAstExpression, LoxAstProgram, Statement,
+    TokenType, UnaryExpr,
 };
+use super::EvaluationResult;
+
 use std::rc::Weak;
 use std::{cell::RefCell, rc::Rc};
 

@@ -1,8 +1,8 @@
 mod lox;
 
-use lox::parser::LoxParser;
-use lox::scanner::LoxScanner;
-use lox::traits::EvaluationResult;
+use lox::EvaluationResult;
+use lox::LoxParser;
+use lox::LoxScanner;
 
 use std::env;
 use std::fs;

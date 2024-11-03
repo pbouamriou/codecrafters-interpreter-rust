@@ -1,4 +1,4 @@
-use crate::lox::{Ast, AstPrint, Token, TokenType};
+use crate::lox::private::{Ast, AstPrint, Token, TokenType};
 
 use core::fmt;
 use std::rc::Rc;

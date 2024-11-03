@@ -1,7 +1,8 @@
-use crate::lox::{
-    Environment, EvaluationError, EvaluationResult, MatchResult, Position, Scanner, Token,
-    TokenType,
+use super::private::{
+    Environment, EvaluationError, MatchResult, Position, Scanner, Token, TokenType,
 };
+use super::EvaluationResult;
+
 use core::{fmt, str};
 use std::rc::Rc;
 
@@ -477,5 +478,56 @@ impl<'a> Scanner for LoxScanner<'a> {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unexpected_character_error() {
+        let result = LoxScanner::new("^").tokenize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unterminated_string_error() {
+        let result = LoxScanner::new("\"unterminated").tokenize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_token_types() {
+        let source = "( ) { } , . - + * / ; = == ! != < <= > >=";
+        let result = LoxScanner::new(source).tokenize();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        let token_types: Vec<TokenType> = tokens.iter().map(|token| token.token_type).collect();
+        assert_eq!(
+            token_types,
+            vec![
+                TokenType::LeftParent,
+                TokenType::RightParent,
+                TokenType::LeftBrace,
+                TokenType::RightBrace,
+                TokenType::Comma,
+                TokenType::Dot,
+                TokenType::Minus,
+                TokenType::Plus,
+                TokenType::Star,
+                TokenType::Slash,
+                TokenType::SemiColon,
+                TokenType::Equal,
+                TokenType::EqualEqual,
+                TokenType::Bang,
+                TokenType::BangEqual,
+                TokenType::Less,
+                TokenType::LessEqual,
+                TokenType::Greater,
+                TokenType::GreaterEqual,
+                TokenType::Eof
+            ]
+        );
     }
 }

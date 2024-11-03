@@ -1,7 +1,7 @@
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Position {
     pub line_number: u32,
     pub position: u32,
@@ -20,7 +20,7 @@ pub trait Scanner {
     fn get_position(&self) -> Position;
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum TokenType {
     LeftParent,
     RightParent,
@@ -67,7 +67,7 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexem: String,

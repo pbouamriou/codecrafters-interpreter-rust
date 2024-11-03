@@ -1,12 +1,9 @@
-pub mod parser;
-pub mod runner;
-pub mod scanner;
-pub mod traits;
+mod parser;
+mod private;
+mod runner;
+mod scanner;
+mod traits;
 
-use traits::{
-    Ast, AstPrint, EvaluationError, EvaluationResult, MatchResult, Position, Scanner, Token,
-    TokenType,
-};
-
-use parser::{BinaryExpr, Expr, GroupExpr, LoxAstExpression, LoxAstProgram, Statement, UnaryExpr};
-use runner::Environment;
+pub use parser::LoxParser;
+pub use scanner::LoxScanner;
+pub use traits::EvaluationResult;
